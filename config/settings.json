@@ -1,0 +1,23 @@
+{
+    "work_addresses": [
+        "leandro n. alem 815",
+        "juana manso",
+        "hipolito bouchard",
+        "dorrego 2520",
+        "cordoba 111",
+        "torre bbva"
+    ],
+    "home_address": "juan bautista alberdi 1880",
+    "personal_addresses": [
+        "el hornero 266",
+        "boedo",
+        "salta 1054",
+        "bernardo de irigoyen",
+        "carlos calvo",
+        "s. martin 7216"
+    ],
+    "gmail": {
+        "search_query": "subject:\"Tu viaje\" (from:noreply@uber.com OR from:didi@ar.didiglobal.com)",
+        "receipts_dir": "receipts"
+    }
+}

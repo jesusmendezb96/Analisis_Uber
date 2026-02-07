@@ -1,0 +1,16 @@
+beautifulsoup4>=4.12.0
+lxml>=4.9.0
+pandas>=2.1.0
+playwright>=1.40.0  # Generacion de PDFs con renderizado de navegador real
+flask>=3.0.0        # Interfaz web local
+
+# Gmail API (opcional - solo necesario si se usa descarga automatica)
+google-api-python-client>=2.100.0
+google-auth-httplib2>=0.1.1
+google-auth-oauthlib>=1.1.0
+
+# Nota: Despues de instalar playwright, ejecutar:
+# python -m playwright install chromium
+#
+# Para Gmail API, colocar credentials.json en config/
+# Ver instrucciones en la seccion Gmail de la web UI

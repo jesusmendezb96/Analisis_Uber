@@ -1,0 +1,215 @@
+{% extends "base.html" %}
+{% block title %}Dashboard - Uber/Didi Analyzer{% endblock %}
+{% block content %}
+<h2 class="mb-4">Dashboard</h2>
+
+<!-- Stats cards -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card stat-card laburo">
+            <div class="card-body">
+                <h6 class="card-subtitle text-muted">Laburo</h6>
+                <h3 class="card-title text-success">ARS {{ "{:,.0f}".format(total_laburo) }}</h3>
+                <small class="text-muted">{{ stats.by_category.get('Laburo', {}).get('count', 0) }} viajes</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card stat-card personal">
+            <div class="card-body">
+                <h6 class="card-subtitle text-muted">Personal</h6>
+                <h3 class="card-title text-primary">ARS {{ "{:,.0f}".format(total_personal) }}</h3>
+                <small class="text-muted">{{ stats.by_category.get('Personal', {}).get('count', 0) }} viajes</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card stat-card total">
+            <div class="card-body">
+                <h6 class="card-subtitle text-muted">Total</h6>
+                <h3 class="card-title" style="color: #6f42c1;">ARS {{ "{:,.0f}".format(total_all) }}</h3>
+                <small class="text-muted">{{ stats.total_trips }} viajes</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card stat-card pending">
+            <div class="card-body">
+                <h6 class="card-subtitle text-muted">Sin categorizar</h6>
+                <h3 class="card-title text-warning">{{ stats.uncategorized_count }}</h3>
+                <small class="text-muted">
+                    {% if stats.uncategorized_count > 0 %}
+                        <a href="/trips?needs_review=1" class="text-warning">Revisar</a>
+                    {% else %}
+                        Todo categorizado
+                    {% endif %}
+                </small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Quick actions -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">Acciones rapidas</h5>
+                <div class="d-flex gap-2 flex-wrap">
+                    <a href="/trips" class="btn btn-outline-primary">
+                        <i class="bi bi-list-ul"></i> Ver viajes
+                    </a>
+                    <form hx-post="/trips/auto-categorize" hx-target="#alerts" class="d-inline">
+                        <button type="submit" class="btn btn-outline-success">
+                            <i class="bi bi-magic"></i> Auto-categorizar
+                        </button>
+                    </form>
+                    <form hx-post="/reports/generate-summary" hx-target="#alerts" hx-swap="innerHTML" class="d-inline">
+                        <button type="submit" class="btn btn-outline-info">
+                            <i class="bi bi-file-text"></i> Generar reporte
+                        </button>
+                    </form>
+                    <form hx-post="/reports/generate-pdfs" hx-target="#task-area" hx-swap="innerHTML" class="d-inline">
+                        <button type="submit" class="btn btn-outline-danger">
+                            <i class="bi bi-file-pdf"></i> Generar PDFs
+                        </button>
+                    </form>
+                </div>
+                <form hx-post="/reports/run-pipeline" hx-target="#task-area" hx-swap="innerHTML" class="mt-3">
+                    <div class="d-flex align-items-end gap-2">
+                        <div>
+                            <label class="form-label small mb-1">Descargar emails desde:</label>
+                            <input type="date" name="after_date" class="form-control form-control-sm" value="2026-01-01">
+                        </div>
+                        <div class="form-check mb-1">
+                            <input class="form-check-input" type="checkbox" name="include_gmail" value="1" id="dashGmail" checked>
+                            <label class="form-check-label" for="dashGmail">Incluir Gmail</label>
+                        </div>
+                        <button type="submit" class="btn btn-dark btn-sm">
+                            <i class="bi bi-play-circle"></i> Pipeline completo
+                        </button>
+                    </div>
+                </form>
+                <div id="task-area" class="mt-3"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Monthly breakdown -->
+{% if stats.by_month %}
+<div class="row mb-4">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">Desglose mensual</h5>
+                <table class="table table-sm">
+                    <thead>
+                        <tr>
+                            <th>Mes</th>
+                            <th class="text-end">Laburo</th>
+                            <th class="text-end">Personal</th>
+                            <th class="text-end">Total</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for month in stats.by_month|sort(reverse=true) %}
+                        <tr>
+                            <td>{{ month }}</td>
+                            <td class="text-end text-success">
+                                {% if 'Laburo' in stats.by_month[month] %}
+                                    ARS {{ "{:,.0f}".format(stats.by_month[month]['Laburo']['total']) }}
+                                    <small class="text-muted">({{ stats.by_month[month]['Laburo']['count'] }})</small>
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
+                            <td class="text-end text-primary">
+                                {% if 'Personal' in stats.by_month[month] %}
+                                    ARS {{ "{:,.0f}".format(stats.by_month[month]['Personal']['total']) }}
+                                    <small class="text-muted">({{ stats.by_month[month]['Personal']['count'] }})</small>
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
+                            <td class="text-end fw-bold">
+                                {% set month_total = namespace(val=0) %}
+                                {% for cat, data in stats.by_month[month].items() %}
+                                    {% set month_total.val = month_total.val + data['total'] %}
+                                {% endfor %}
+                                ARS {{ "{:,.0f}".format(month_total.val) }}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- By service -->
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">Por servicio</h5>
+                {% for service, data in stats.by_service.items() %}
+                <div class="d-flex justify-content-between mb-2">
+                    <span>{{ service }}</span>
+                    <span class="fw-bold">{{ data.count }} viajes</span>
+                </div>
+                <div class="progress mb-3" style="height: 8px;">
+                    {% set pct = (data.count / stats.total_trips * 100) if stats.total_trips > 0 else 0 %}
+                    <div class="progress-bar bg-{{ 'primary' if service == 'Uber' else 'warning' }}"
+                         style="width: {{ pct }}%"></div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Recent pipeline runs -->
+{% if recent_runs %}
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">Ejecuciones recientes</h5>
+                <table class="table table-sm">
+                    <thead>
+                        <tr>
+                            <th>Fecha</th>
+                            <th>Estado</th>
+                            <th>Emails</th>
+                            <th>Viajes</th>
+                            <th>PDFs</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for run in recent_runs %}
+                        <tr>
+                            <td>{{ run.started_at }}</td>
+                            <td>
+                                {% if run.status == 'completed' %}
+                                    <span class="badge bg-success">OK</span>
+                                {% elif run.status == 'running' %}
+                                    <span class="badge bg-warning">En curso</span>
+                                {% else %}
+                                    <span class="badge bg-danger">Error</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ run.emails_downloaded }}</td>
+                            <td>{{ run.trips_parsed }}</td>
+                            <td>{{ run.pdfs_generated }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{% endblock %}

@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+{% block title %}Configuracion - Uber/Didi Analyzer{% endblock %}
+{% block content %}
+<h2 class="mb-4">Configuracion</h2>
+
+<!-- System status -->
+<div class="card mb-4">
+    <div class="card-body">
+        <h5 class="card-title">Estado del sistema</h5>
+        <div class="row">
+            <div class="col-md-4">
+                <div class="d-flex align-items-center gap-2 mb-2">
+                    <span class="badge bg-{{ 'success' if db_exists else 'danger' }}">
+                        {{ 'OK' if db_exists else 'No' }}
+                    </span>
+                    <span>Base de datos SQLite</span>
+                </div>
+                {% if db_exists %}
+                <small class="text-muted">Tamano: {{ db_size }}</small>
+                {% endif %}
+            </div>
+            <div class="col-md-4">
+                <div class="d-flex align-items-center gap-2 mb-2">
+                    <span class="badge bg-{{ 'success' if gmail_configured else 'warning' }}">
+                        {{ 'OK' if gmail_configured else 'No' }}
+                    </span>
+                    <span>Gmail API</span>
+                </div>
+                {% if not gmail_configured %}
+                <small class="text-muted">Coloca credentials.json en config/</small>
+                {% endif %}
+            </div>
+            <div class="col-md-4">
+                <div class="d-flex align-items-center gap-2 mb-2">
+                    <span class="badge bg-success">OK</span>
+                    <span>Parser Uber/Didi</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Address settings -->
+<div class="card mb-4">
+    <div class="card-body">
+        <h5 class="card-title">Direcciones de trabajo</h5>
+        <p class="text-muted small">Si un viaje involucra alguna de estas direcciones (origen o destino), se categoriza automaticamente como "Laburo".</p>
+
+        <form hx-post="/settings/save" hx-target="#save-result" hx-swap="innerHTML">
+            <div class="mb-3">
+                <label class="form-label">Direcciones de trabajo (una por linea, en minusculas, sin acentos):</label>
+                <textarea name="work_addresses" class="form-control font-monospace" rows="8"
+                    placeholder="leandro n. alem 815&#10;juana manso&#10;hipolito bouchard">{{ work_addresses|join('\n') }}</textarea>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">Direccion de casa:</label>
+                <input type="text" name="home_address" class="form-control font-monospace"
+                       value="{{ home_address }}" placeholder="juan bautista alberdi 1880">
+                <small class="text-muted">
+                    Viajes entre casa y una direccion NO laboral se categorizan como "Personal".
+                </small>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">Direcciones personales conocidas (una por linea, opcional):</label>
+                <textarea name="personal_addresses" class="form-control font-monospace" rows="4"
+                    placeholder="el hornero 266&#10;boedo">{{ personal_addresses|join('\n') }}</textarea>
+            </div>
+
+            <button type="submit" class="btn btn-primary">
+                <i class="bi bi-save"></i> Guardar configuracion
+            </button>
+        </form>
+
+        <div id="save-result" class="mt-3"></div>
+    </div>
+</div>
+
+<!-- Migration tool -->
+<div class="card">
+    <div class="card-body">
+        <h5 class="card-title">Herramientas</h5>
+        <div class="d-flex gap-2 flex-wrap">
+            <a href="/trips/export-csv" class="btn btn-outline-secondary btn-sm"
+               hx-post="/trips/export-csv" hx-target="#tool-result" hx-swap="innerHTML">
+                <i class="bi bi-download"></i> Exportar DB a CSV
+            </a>
+        </div>
+        <div id="tool-result" class="mt-3"></div>
+        <hr>
+        <small class="text-muted">
+            <strong>Nota:</strong> Para migrar el CSV existente a la base de datos, ejecuta:
+            <code>python migrate_csv.py</code>
+        </small>
+    </div>
+</div>
+
+<!-- Reset -->
+<div class="card border-danger">
+    <div class="card-body">
+        <h5 class="card-title text-danger"><i class="bi bi-trash3"></i> Borrar todo y empezar de cero</h5>
+        <p class="text-muted">Borra todos los recibos descargados, la base de datos, reportes y PDFs. Solo se mantiene la configuracion (direcciones y credenciales Gmail).</p>
+        <div id="reset-area">
+            <button class="btn btn-outline-danger" onclick="document.getElementById('reset-confirm').style.display='block'; this.style.display='none';">
+                <i class="bi bi-trash3"></i> Borrar todo...
+            </button>
+            <div id="reset-confirm" style="display:none;" class="mt-2">
+                <div class="alert alert-danger py-2">
+                    <strong>Estas seguro?</strong> Esto borra todos los datos. No se puede deshacer.
+                </div>
+                <form hx-post="/settings/reset" hx-target="#reset-area" hx-swap="innerHTML">
+                    <button type="submit" class="btn btn-danger">
+                        <i class="bi bi-trash3"></i> Si, borrar todo
+                    </button>
+                    <button type="button" class="btn btn-secondary ms-2"
+                        onclick="document.getElementById('reset-confirm').style.display='none'; this.closest('.card-body').querySelector('.btn-outline-danger').style.display='inline-block';">
+                        Cancelar
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}

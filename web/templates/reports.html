@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% block title %}Reportes - Uber/Didi Analyzer{% endblock %}
+{% block content %}
+<h2 class="mb-4">Reportes y Reintegros</h2>
+
+<!-- Summary stats -->
+<div class="row mb-4">
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-body text-center">
+                <h6 class="text-muted">Viajes Laburo</h6>
+                <h3 class="text-success">{{ stats.by_category.get('Laburo', {}).get('count', 0) }}</h3>
+                <p class="mb-0">ARS {{ "{:,.2f}".format(stats.by_category.get('Laburo', {}).get('total', 0)) }}</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-body text-center">
+                <h6 class="text-muted">Sin categorizar</h6>
+                <h3 class="text-warning">{{ stats.uncategorized_count }}</h3>
+                {% if stats.uncategorized_count > 0 %}
+                <a href="/trips?needs_review=1" class="small">Categorizar ahora</a>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-body text-center">
+                <h6 class="text-muted">PDFs generados</h6>
+                <h3>{{ pdf_count }}</h3>
+                <p class="mb-0 text-muted">en carpeta reintegros/</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Actions -->
+<div class="row mb-4">
+    <div class="col-md-6">
+        <div class="card h-100">
+            <div class="card-body">
+                <h5 class="card-title"><i class="bi bi-file-text"></i> Reporte Summary</h5>
+                <p class="text-muted">Genera un reporte markdown con totales por categoria y mes.</p>
+                <form hx-post="/reports/generate-summary" hx-target="#action-area" hx-swap="innerHTML">
+                    <button type="submit" class="btn btn-info">
+                        <i class="bi bi-file-text"></i> Generar Summary
+                    </button>
+                </form>
+                {% if summary_exists %}
+                <small class="text-muted d-block mt-2">Existe: output/summary.md</small>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card h-100">
+            <div class="card-body">
+                <h5 class="card-title"><i class="bi bi-file-pdf"></i> PDFs de Reintegro</h5>
+                <p class="text-muted">Genera PDFs de los recibos de Laburo, listos para el formulario de reintegros.</p>
+                <form hx-post="/reports/generate-pdfs" hx-target="#action-area" hx-swap="innerHTML">
+                    <button type="submit" class="btn btn-danger"
+                        {% if stats.by_category.get('Laburo', {}).get('count', 0) == 0 %}disabled{% endif %}>
+                        <i class="bi bi-file-pdf"></i> Generar PDFs
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="action-area" class="mb-4"></div>
+
+<!-- Pipeline -->
+<div class="card mb-4">
+    <div class="card-body">
+        <h5 class="card-title"><i class="bi bi-play-circle"></i> Pipeline Completo</h5>
+        <p class="text-muted">Ejecuta todo el flujo: Gmail -> Parsear -> Auto-categorizar -> Summary -> PDFs</p>
+        <form hx-post="/reports/run-pipeline" hx-target="#action-area" hx-swap="innerHTML">
+            <div class="row g-3 align-items-end mb-3">
+                <div class="col-auto">
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="include_gmail" value="1" id="includeGmail" checked>
+                        <label class="form-check-label" for="includeGmail">
+                            Incluir descarga de Gmail
+                        </label>
+                    </div>
+                </div>
+                <div class="col-auto">
+                    <label class="form-label small mb-1">Emails desde:</label>
+                    <input type="date" name="after_date" class="form-control form-control-sm" value="2026-01-01">
+                </div>
+            </div>
+            <button type="submit" class="btn btn-dark">
+                <i class="bi bi-play-circle"></i> Ejecutar Pipeline
+            </button>
+        </form>
+    </div>
+</div>
+
+<!-- Existing PDFs -->
+{% if pdf_files %}
+<div class="card">
+    <div class="card-body">
+        <h5 class="card-title">PDFs generados ({{ pdf_count }})</h5>
+        <div class="list-group list-group-flush">
+            {% for pdf in pdf_files %}
+            <div class="list-group-item d-flex justify-content-between align-items-center py-1">
+                <small><i class="bi bi-file-pdf text-danger"></i> {{ pdf }}</small>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{% endblock %}

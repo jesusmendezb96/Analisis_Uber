@@ -1,0 +1,31 @@
+{# Inner content of a trip table row (reused by trips.html and _trip_row.html) #}
+<td class="text-muted">{{ trip.id }}</td>
+<td>{{ trip.date }}</td>
+<td>
+    <span class="badge bg-{{ 'dark' if trip.service == 'Uber' else 'warning text-dark' }}">
+        {{ trip.service }}
+    </span>
+</td>
+<td class="small" title="{{ trip.origin }}">
+    {{ trip.origin[:50] }}{% if trip.origin|length > 50 %}...{% endif %}
+</td>
+<td class="small" title="{{ trip.destination }}">
+    {{ trip.destination[:50] }}{% if trip.destination|length > 50 %}...{% endif %}
+</td>
+<td class="text-end">
+    <strong>{{ trip.currency }} {{ "{:,.2f}".format(trip.amount) }}</strong>
+</td>
+<td>
+    <select class="form-select form-select-sm category-badge
+                   {% if trip.category == 'Laburo' %}bg-success bg-opacity-10 text-success
+                   {% elif trip.category == 'Personal' %}bg-primary bg-opacity-10 text-primary
+                   {% else %}bg-warning bg-opacity-10 text-warning{% endif %}"
+            hx-post="/trips/{{ trip.id }}/category"
+            hx-target="#trip-row-{{ trip.id }}"
+            hx-swap="outerHTML"
+            name="category">
+        <option value="" {% if not trip.category %}selected{% endif %}>-- Elegir --</option>
+        <option value="Laburo" {% if trip.category == 'Laburo' %}selected{% endif %}>Laburo</option>
+        <option value="Personal" {% if trip.category == 'Personal' %}selected{% endif %}>Personal</option>
+    </select>
+</td>

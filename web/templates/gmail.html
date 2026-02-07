@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}Gmail - Uber/Didi Analyzer{% endblock %}
+{% block content %}
+<h2 class="mb-4">Gmail - Descarga de Recibos</h2>
+
+<!-- Connection status -->
+<div class="card mb-4">
+    <div class="card-body">
+        <h5 class="card-title">Estado de conexion</h5>
+        {% if configured %}
+            <div class="d-flex align-items-center gap-2 mb-3">
+                <span class="badge bg-success">Configurado</span>
+                <span class="text-muted">credentials.json encontrado en config/</span>
+            </div>
+
+            <form hx-post="/gmail/download" hx-target="#download-area" hx-swap="innerHTML">
+                <div class="row g-2 align-items-end">
+                    <div class="col-auto">
+                        <label class="form-label">Descargar emails desde:</label>
+                        <input type="date" name="after_date" class="form-control form-control-sm"
+                               value="" placeholder="Opcional">
+                    </div>
+                    <div class="col-auto">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-cloud-download"></i> Descargar nuevos recibos
+                        </button>
+                    </div>
+                </div>
+            </form>
+            <div id="download-area" class="mt-3"></div>
+        {% else %}
+            <div class="d-flex align-items-center gap-2 mb-3">
+                <span class="badge bg-danger">No configurado</span>
+            </div>
+            <div class="alert alert-info">
+                <h6>Para configurar Gmail API:</h6>
+                <ol class="mb-0">
+                    <li>Ve a <a href="https://console.cloud.google.com" target="_blank">Google Cloud Console</a></li>
+                    <li>Crea un proyecto y habilita la Gmail API</li>
+                    <li>Crea credenciales OAuth 2.0 (tipo "App de escritorio")</li>
+                    <li>Descarga el archivo JSON y guardalo como <code>config/credentials.json</code></li>
+                    <li>La primera vez que descargues, se abrira el navegador para autorizar</li>
+                </ol>
+            </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Download history -->
+<div class="card">
+    <div class="card-body">
+        <h5 class="card-title">Historial de descargas ({{ total_downloaded }} emails)</h5>
+        {% if downloaded_emails %}
+        <div class="table-responsive">
+            <table class="table table-sm">
+                <thead>
+                    <tr>
+                        <th>Fecha descarga</th>
+                        <th>Asunto</th>
+                        <th>Remitente</th>
+                        <th>Archivo</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for email in downloaded_emails[:20] %}
+                    <tr>
+                        <td class="small">{{ email.downloaded_at }}</td>
+                        <td class="small">{{ email.subject[:60] }}{% if email.subject|length > 60 %}...{% endif %}</td>
+                        <td class="small">{{ email.sender[:40] }}</td>
+                        <td class="small text-muted">{{ email.filename }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% if total_downloaded > 20 %}
+        <p class="text-muted small">Mostrando 20 de {{ total_downloaded }} emails</p>
+        {% endif %}
+        {% else %}
+        <p class="text-muted">No se han descargado emails todavia.</p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

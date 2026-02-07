@@ -1,0 +1,7 @@
+<div class="d-flex align-items-center gap-2 p-2 bg-light rounded"
+     hx-get="{{ status_url|default('/reports/task-status/' + task_id) }}"
+     hx-trigger="every 2s"
+     hx-swap="outerHTML">
+    <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
+    <span>{{ description }}</span>
+</div>

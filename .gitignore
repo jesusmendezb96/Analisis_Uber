@@ -1,0 +1,46 @@
+# Credenciales y tokens (NUNCA subir)
+config/credentials.json
+config/token.json
+
+# Base de datos
+data/*.db
+data/*.db-wal
+data/*.db-shm
+
+# Recibos descargados (datos personales)
+receipts/*.eml
+receipts/*.html
+
+# Archivos generados
+output/*.csv
+output/*.md
+reintegros/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Claude Code
+.claude/
+
+# Keep directory structure
+!receipts/.gitkeep
+!output/.gitkeep
+!data/.gitkeep
+!config/.gitkeep
