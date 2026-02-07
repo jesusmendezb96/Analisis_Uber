@@ -1,338 +1,229 @@
-# Analizador de Gastos de Uber/Didi
+# Analizador de Gastos Uber/Didi
 
-Sistema automatizado para procesar recibos de Uber y Didi desde Gmail, categorizarlos como gastos personales o laborales, y generar reportes para reintegros.
+Sistema automatizado para procesar recibos de Uber y Didi, categorizarlos como gastos laborales o personales, y generar archivos listos para reintegros corporativos.
 
-## Características
+Incluye interfaz web local, integracion con Gmail API para descarga automatica, y auto-categorizacion inteligente por direcciones.
 
-- ✅ Parsea recibos de **Uber** y **Didi** (archivos .eml)
-- ✅ Extrae automáticamente: fecha, origen, destino, monto y moneda
-- ✅ Detecta y elimina duplicados automáticamente
-- ✅ Genera CSV para categorización manual
-- ✅ Genera reporte Markdown con totales por categoría y mes
-- ✅ **Convierte recibos HTML a PDF automáticamente** usando Playwright
-- ✅ **Numera PDFs secuencialmente** para facilitar carga en formularios web
-- ✅ Genera CSV listo para copiar al sistema de reintegros corporativo
-- ✅ Maneja múltiples monedas (ARS, USD, EUR)
+## Funcionalidades
 
-## Instalación
+- **Descarga automatica** de recibos desde Gmail via API (OAuth2)
+- **Parsing** de emails .eml de Uber y Didi (fecha, origen, destino, monto, moneda)
+- **Deduplicacion automatica** via constraints de base de datos
+- **Auto-categorizacion** de viajes (Laburo/Personal) basada en direcciones configurables
+- **Interfaz web** local con Bootstrap + htmx para revision y edicion de categorias
+- **Generacion de PDFs** con Playwright (Chromium headless, batch optimizado)
+- **Pipeline unificado** que ejecuta todo el flujo con un click o un comando
+- **CLI backward-compatible** con el flujo manual original
 
-### 1. Requisitos
+## Instalacion
 
-- Python 3.7 o superior
-- pip (gestor de paquetes de Python)
+### Requisitos
 
-### 2. Instalar dependencias
+- Python 3.10 o superior
+- pip
+
+### Dependencias
 
 ```bash
 pip install -r requirements.txt
 python -m playwright install chromium
 ```
 
-Las dependencias son:
-- `beautifulsoup4` - Parsing de HTML
-- `lxml` - Parser rápido
-- `pandas` - Manipulación de datos y CSV
-- `playwright` - Generación de PDFs con renderizado de navegador real
+Las dependencias principales son:
 
-**Nota:** Playwright requiere una instalación adicional de binarios de navegador (Chromium), que se realiza con el segundo comando.
+| Paquete | Uso |
+|---------|-----|
+| beautifulsoup4 | Parsing de HTML de recibos |
+| lxml | Backend de parsing |
+| pandas | Manipulacion de datos y CSV |
+| playwright | Generacion de PDFs con renderizado real de browser |
+| flask | Interfaz web local |
+| google-api-python-client | Integracion Gmail API (opcional) |
+
+### Gmail API (opcional)
+
+Para habilitar la descarga automatica desde Gmail:
+
+1. Ir a [Google Cloud Console](https://console.cloud.google.com)
+2. Crear un proyecto y habilitar la **Gmail API**
+3. Crear credenciales **OAuth 2.0** (tipo "App de escritorio")
+4. Descargar el JSON y guardarlo como `config/credentials.json`
+5. La primera ejecucion abre el navegador para autorizar (scope: solo lectura)
+6. El token se guarda automaticamente en `config/token.json`
 
 ## Uso
 
-### Paso 1: Descargar recibos de Gmail
-
-1. Ve a Gmail y busca: `from:uber.receipts@uber.com` o `from:didi@ar.didiglobal.com`
-2. Abre cada email de recibo
-3. Descarga el email como .eml:
-   - En Gmail web: Click en los 3 puntos → "Descargar mensaje"
-   - O usa `Ctrl+S` → "Guardar como" → Tipo: "Correo electrónico"
-4. Coloca todos los archivos .eml en la carpeta `receipts/`
-
-### Paso 2: Parsear recibos y generar CSV
+### Opcion A: Interfaz Web (Recomendada)
 
 ```bash
-python main.py
+python main.py --web
 ```
 
-Esto generará `output/uber_trips.csv` con todos los viajes parseados.
+Abre http://localhost:5000 con:
 
-**Salida esperada:**
-```
-Found 5 receipt files
+- **Dashboard** - Estadisticas generales, desglose por mes, acciones rapidas
+- **Viajes** - Tabla completa con edicion inline de categorias (dropdown por fila)
+- **Gmail** - Descargar recibos con selector de fecha
+- **Reportes** - Generar summary, PDFs, o ejecutar pipeline completo
+- **Configuracion** - Editar direcciones de trabajo/casa, resetear datos
 
-[OK] Tu viaje del jueves con Uber.eml
-[OK] Tu viaje del viernes con Uber.eml
-[OK] Tu viaje Poné Tu Precio.eml
-...
-
-[OK] Successfully parsed: 5 trips
-[OK] Generated: output\uber_trips.csv
-```
-
-### Paso 3: Categorizar viajes
-
-1. Abre `output/uber_trips.csv` en Excel o un editor de texto
-2. Llena la columna `Category` con:
-   - `Personal` - para viajes personales
-   - `Laburo` - para viajes de trabajo
-3. Guarda el archivo
-
-**Ejemplo:**
-```csv
-filename,service,date,origin,destination,amount,currency,Category
-viaje_1.eml,Uber,2026-01-23,Av. Corrientes 1234,Av. Libertador 5678,5938.0,ARS,Personal
-viaje_2.eml,Uber,2026-01-24,Oficina Central,Cliente XYZ,6344.0,ARS,Laburo
-```
-
-### Paso 4: Generar resumen
+### Opcion B: Pipeline automatizado por CLI
 
 ```bash
-python main.py --summary
+python main.py --pipeline
 ```
 
-Esto genera `output/summary.md` con totales por categoría y mes.
+Ejecuta en secuencia: parseo de recibos -> deduplicacion -> auto-categorizacion -> reporte -> PDFs.
 
-**Salida esperada:**
-```
-============================================================
-EXPENSE SUMMARY
-============================================================
-Laburo: ARS 47,233.34 (3 trips)
-Personal: ARS 13,437.00 (2 trips)
-------------------------------------------------------------
-2026-02: ARS 20,201.00
-2026-01: ARS 40,469.34
-============================================================
-```
-
-### Paso 5: Generar archivos para reintegro (opcional)
-
-Si necesitas presentar reintegros corporativos, este paso automatiza la generación de PDFs:
+Agregar `--download` para incluir descarga de Gmail:
 
 ```bash
-python generar_reintegros.py
+python main.py --pipeline --download
 ```
 
-**Esto generará:**
-- ✅ PDFs automáticamente en `reintegros/` (ej: `01_20260105_Uber_ARS_24757.pdf`)
-  - Numerados secuencialmente (01, 02, 03...) en orden cronológico
-  - Facilita la carga ordenada en formularios web
-- ✅ HTMLs de respaldo en `reintegros/recibos_html/`
-- ✅ CSV listo para copiar en `reintegros/reintegro_data.csv`
-- ✅ Archivo de instrucciones en `reintegros/INSTRUCCIONES.txt`
+### Opcion C: Flujo manual (CLI original)
 
-**Salida esperada:**
-```
-======================================================================
-GENERADOR DE REINTEGROS
-======================================================================
+```bash
+# 1. Colocar archivos .eml en receipts/
+python main.py                  # Parsear y generar CSV
 
-Viajes de Laburo encontrados: 10
-Monto total a reintegrar: ARS 179,859.34
+# 2. Abrir output/uber_trips.csv en Excel, llenar columna Category
 
-Procesando: Tu viaje Uber del lunes.eml
-  [OK] HTML guardado: 01_20260105_Uber_ARS_24757.html
-  Generando PDF...
-  [OK] PDF generado: 01_20260105_Uber_ARS_24757.pdf
-...
-
-======================================================================
-RESUMEN
-======================================================================
-[OK] PDFs generados: 10
-[OK] HTMLs guardados (backup): 10
-[OK] CSV generado: reintegros\reintegro_data.csv
-[OK] Instrucciones: reintegros\INSTRUCCIONES.txt
-
-Total a reintegrar: ARS 179,859.34
-======================================================================
+python main.py --summary        # Generar reporte
+python generar_reintegros.py    # Generar PDFs de reintegro
 ```
 
-**Nota:** La primera vez que ejecutes este script, Playwright se instalará automáticamente si no está presente.
+## Comandos CLI
 
-## Estructura del Proyecto
+| Comando | Descripcion |
+|---------|-------------|
+| `python main.py` | Parsear recibos y generar CSV (modo original) |
+| `python main.py --summary` | Generar summary desde CSV categorizado |
+| `python main.py --db` | Parsear recibos y guardar en SQLite |
+| `python main.py --summary --db` | Generar summary desde base de datos |
+| `python main.py --download` | Descargar recibos nuevos de Gmail |
+| `python main.py --pipeline` | Pipeline completo automatizado |
+| `python main.py --web` | Lanzar interfaz web en localhost:5000 |
+| `python run_web.py` | Lanzar web (abre browser automaticamente) |
+| `python migrate_csv.py` | Migrar CSV existente a SQLite (una sola vez) |
+| `python auto_categorize.py` | Auto-categorizar CSV directo |
+| `python auto_categorize.py --db` | Auto-categorizar en base de datos |
+
+## Arquitectura
+
+### Flujo de Datos
+
+```
+Gmail API ──> receipts/*.eml ──> parser.py ──> SQLite DB ──> categorizer.py
+                                                  │
+                                    ┌─────────────┼─────────────┐
+                                    v             v             v
+                              summary.md    reintegros/*.pdf  Web UI
+                                           reintegro_data.csv
+```
+
+### Estructura del Proyecto
 
 ```
 Analisis_Uber/
-├── receipts/                # Coloca tus archivos .eml aquí
-│   ├── .gitkeep
-│   └── (tus archivos .eml)
-├── output/                  # Reportes generados
-│   ├── uber_trips.csv       # CSV con todos los viajes (EDITAR CATEGORÍAS AQUÍ)
-│   └── summary.md           # Resumen con totales
-├── reintegros/              # Archivos para reintegro corporativo
-│   ├── 01_*.pdf             # PDFs numerados secuencialmente
-│   ├── 02_*.pdf
-│   ├── ...
-│   ├── recibos_html/        # HTMLs de respaldo
-│   ├── reintegro_data.csv   # Datos listos para copiar al formulario
-│   └── INSTRUCCIONES.txt    # Guía de carga
-├── parser.py                # Lógica de parsing Uber/Didi
-├── main.py                  # Script principal
-├── generar_reintegros.py    # Generador de PDFs y CSV de reintegro
-├── auto_categorize.py       # Auto-categorización (opcional)
-├── requirements.txt         # Dependencias
-├── README.md                # Este archivo (guía de usuario)
-├── CLAUDE.md                # Directivas técnicas (para desarrollo)
-├── EJEMPLO_CATEGORIZACION.md # Reglas de categorización validadas
-└── .gitignore               # Archivos ignorados por git
+├── config/                     # Configuracion
+│   ├── credentials.json        # Gmail OAuth (no versionado)
+│   ├── token.json              # Token auto-generado (no versionado)
+│   └── settings.json           # Direcciones de trabajo/casa
+│
+├── data/                       # Base de datos SQLite (no versionado)
+├── services/                   # Logica de negocio
+│   ├── database.py             # Schema + queries SQLite
+│   ├── gmail_service.py        # Gmail API OAuth + descarga
+│   ├── categorizer.py          # Auto-categorizacion por direcciones
+│   ├── pipeline.py             # Orquestador del flujo completo
+│   └── task_runner.py          # Ejecutor de tareas background
+│
+├── web/                        # Interfaz web Flask
+│   ├── routes/                 # 5 blueprints: dashboard, trips, gmail, reports, settings
+│   └── templates/              # Jinja2 + Bootstrap 5 + htmx
+│
+├── parser.py                   # Parser de recibos Uber/Didi
+├── main.py                     # Entry point CLI
+├── generar_reintegros.py       # Generador de PDFs
+├── auto_categorize.py          # Categorizacion (wrapper legacy)
+├── migrate_csv.py              # Migracion CSV -> SQLite
+└── run_web.py                  # Entry point web
 ```
 
-## Formato del CSV
+### Base de Datos
 
-El archivo `output/uber_trips.csv` contiene:
+SQLite con WAL mode. Tres tablas:
 
-| Columna | Descripción | Ejemplo |
-|---------|-------------|---------|
-| filename | Nombre del archivo .eml | `Tu viaje del lunes.eml` |
-| service | Servicio usado | `Uber` o `Didi` |
-| date | Fecha del viaje | `2026-01-23` |
-| origin | Dirección de origen | `Av. Corrientes 1234, CABA` |
-| destination | Dirección de destino | `Av. Libertador 5678, CABA` |
-| amount | Monto pagado | `5938.0` |
-| currency | Moneda | `ARS`, `USD`, `EUR` |
-| Category | Categoría (manual) | `Personal` o `Laburo` |
+- **trips** - Viajes con deduplicacion `UNIQUE(date, service, amount, origin, destination)`
+- **downloaded_emails** - Tracking de emails descargados (evita re-descargas)
+- **pipeline_runs** - Historial de ejecuciones del pipeline
 
-## Formato del Resumen
+Fechas almacenadas como `YYYY-MM-DD` (ISO 8601).
 
-El archivo `output/summary.md` incluye:
+## Logica de Categorizacion
 
-- **Totales generales** por categoría
-- **Desglose por servicio** (Uber vs Didi)
-- **Desglose mensual** con subtotales
+### Regla Principal
 
-Ejemplo:
-```markdown
-# Uber/Didi Expense Summary
+Un viaje es **Laburo** si el origen O el destino contiene cualquier direccion de trabajo configurada. Esto incluye viajes Casa -> Trabajo y Trabajo -> Casa.
 
-## Overall Totals by Category
-- **Laburo**: ARS 47,233.34 (3 trips)
-- **Personal**: ARS 13,437.00 (2 trips)
+Un viaje es **Personal** solo si NO involucra ninguna direccion de trabajo.
 
-## By Service
-- **Uber**: ARS 39,982.00 (4 trips)
-- **Didi**: ARS 20,688.34 (1 trips)
+### Direcciones Configurables
 
-## Monthly Breakdown
-### 2026-02
-- **Laburo**: ARS 20,201.00 (1 trips)
-- *Month Total*: ARS 20,201.00 (1 trips)
+Las direcciones se configuran en `config/settings.json` o desde la web UI en `/settings`:
+
+```json
+{
+    "work_addresses": [
+        "leandro n. alem 815",
+        "juana manso",
+        "hipolito bouchard",
+        "dorrego 2520"
+    ],
+    "home_address": "juan bautista alberdi 1880"
+}
 ```
 
-## Formato de Archivos de Reintegro
+Las direcciones se normalizan automaticamente: lowercase, sin acentos, sin prefijos (Av., Avenida, Calle).
 
-Cuando ejecutas `python generar_reintegros.py`, se generan archivos listos para cargar en el sistema de reintegros corporativo.
+## Archivos de Reintegro
 
-### Estructura de archivos PDF
+Al generar PDFs, se crean en `reintegros/`:
 
-Los PDFs se nombran siguiendo este formato:
-```
-XX_YYYYMMDD_Servicio_MONEDA_MONTO.pdf
+| Archivo | Contenido |
+|---------|-----------|
+| `01_20260105_Uber_ARS_24757.pdf` | PDF del recibo (numerado cronologicamente) |
+| `recibos_html/*.html` | HTMLs de respaldo |
+| `reintegro_data.csv` | CSV con datos para copiar al formulario corporativo |
+| `INSTRUCCIONES.txt` | Guia de carga paso a paso |
 
-Ejemplo: 01_20260105_Uber_ARS_24757.pdf
-```
+Formato de nombre PDF: `{numero}_{YYYYMMDD}_{servicio}_{moneda}_{monto}.pdf`
 
-Donde:
-- **XX** = Prefijo numérico secuencial (01, 02, 03...) en orden cronológico
-- **YYYYMMDD** = Fecha del viaje (año-mes-día)
-- **Servicio** = Uber o Didi
-- **MONEDA** = ARS, USD, EUR, etc.
-- **MONTO** = Monto sin decimales
+El CSV de reintegro incluye: Fecha, Tipo_Gasto, Servicio, Monto, Moneda, Archivo_PDF, Origen, Destino.
 
-**Ventaja:** Los archivos están pre-ordenados para facilitar la carga secuencial en formularios web.
+## Resolucion de Problemas
 
-### CSV de Reintegro
-
-El archivo `reintegros/reintegro_data.csv` contiene:
-
-| Columna | Descripción | Ejemplo |
-|---------|-------------|---------|
-| Fecha | Fecha del viaje | `05/01/2026` |
-| Tipo_Gasto | Tipo de gasto | `Taxi` |
-| Servicio | Servicio usado | `Uber` o `Didi` |
-| Monto | Monto a reintegrar | `24757.00` |
-| Moneda | Moneda | `ARS` |
-| Archivo_PDF | Nombre del PDF | `01_20260105_Uber_ARS_24757.pdf` |
-| Origen | Dirección de origen | `Alferez Hipólito Bouchard...` |
-| Destino | Dirección de destino | `Av. Juan Bautista Alberdi...` |
-
-**Uso:** Copia y pega directamente desde este CSV al formulario web de reintegros de tu empresa.
-
-## Resolución de Problemas
-
-### No se parsean los recibos
-
-- Verifica que los archivos están en formato .eml
-- Asegúrate de que son recibos reales de Uber o Didi
-- Revisa que los archivos no estén corruptos
-
-### Datos incorrectos
-
-- El parser se basa en la estructura actual de los emails de Uber/Didi
-- Si Uber o Didi cambian el formato de sus emails, el parser puede necesitar ajustes
-- Reporta problemas con ejemplos de recibos
-
-### Encoding issues en Windows
-
-- Los archivos CSV usan UTF-8 con BOM para compatibilidad con Excel
-- Si ves caracteres raros, abre el CSV en un editor que soporte UTF-8
-
-### Error al generar PDFs
-
-**Problema:** `Playwright no está instalado`
-
-**Solución:**
-```bash
-pip install playwright
-python -m playwright install chromium
-```
-
-**Problema:** PDFs generados están en blanco o con errores
-
-**Solución:**
-- Verifica que los archivos .eml tienen contenido HTML válido
-- Ejecuta el script nuevamente (la primera vez puede haber errores de instalación)
-- Revisa que Chromium se instaló correctamente en: `%USERPROFILE%\AppData\Local\ms-playwright\`
-
-### Separador de CSV incorrecto
-
-**Problema:** Excel muestra todo en una columna
-
-**Solución:**
-- El script detecta automáticamente el separador (`,` o `;`)
-- Si editaste el CSV en Excel, puede haber cambiado el separador a `;` (configuración regional)
-- Esto es normal y el script lo maneja automáticamente
+| Problema | Solucion |
+|----------|----------|
+| Excel muestra CSV en una sola columna | El sistema auto-detecta separador `,` o `;`. Abrir con "Datos > Desde texto" |
+| Caracteres raros en terminal Windows | Los archivos usan UTF-8 con BOM. Solo afecta la visualizacion en consola |
+| Playwright no instalado | `pip install playwright && python -m playwright install chromium` |
+| Gmail descarga emails que no son recibos | El filtro usa `subject:"Tu viaje"` + keywords anti-promo. Verificar en `/settings` |
+| Direccion de trabajo no reconocida | Agregar en `config/settings.json` o desde la web en `/settings` (normalizada, sin acentos) |
 
 ## Privacidad y Seguridad
 
-- ⚠️ Los archivos de recibos contienen información personal y financiera
-- Los archivos `.eml` y los reportes generados están en `.gitignore`
-- **No subas recibos reales a repositorios públicos**
-- Este proyecto NO almacena ni transmite datos a servicios externos
+- Las credenciales de Gmail (`credentials.json`, `token.json`) estan excluidas del repositorio
+- Los recibos (.eml), base de datos, y archivos generados no se versionan
+- Gmail API se usa con scope `readonly` (solo lectura)
+- El sistema corre localmente, no transmite datos a servicios externos
+- La interfaz web solo escucha en `127.0.0.1` (localhost)
 
-## Mejoras Implementadas
+## Tecnologias
 
-- ✅ Conversión automática HTML → PDF con Playwright
-- ✅ Numeración secuencial de archivos para formularios web
-- ✅ Generación de CSV listo para sistema de reintegros
-- ✅ Detección y eliminación de duplicados
-- ✅ Soporte para Uber y Didi
-- ✅ Categorización automática basada en direcciones (opcional)
-
-## Próximas Mejoras Potenciales
-
-- [ ] Automatización de descarga desde Gmail (OAuth/IMAP)
-- [ ] Soporte para múltiples monedas con conversión automática
-- [ ] Interfaz web para categorización
-- [ ] Tests automatizados
-- [ ] Exportar a Excel con formato personalizado
-
-## Contribuir
-
-Para reportar bugs o sugerir mejoras, por favor crea un issue con:
-- Descripción del problema
-- Ejemplo de recibo (con datos sensibles removidos)
-- Output esperado vs actual
+Python 3.10+ | Flask | SQLite | htmx | Bootstrap 5 | Playwright | Gmail API
 
 ## Licencia
 
-Este proyecto es de uso personal. Usar bajo tu propio riesgo.
+Proyecto de uso personal.
