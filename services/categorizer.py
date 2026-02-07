@@ -9,17 +9,10 @@ from pathlib import Path
 
 CONFIG_PATH = Path(__file__).parent.parent / 'config' / 'settings.json'
 
-# Fallback values if settings.json is missing
-_DEFAULT_WORK_ADDRESSES = [
-    "leandro n. alem 815",
-    "juana manso",
-    "hipolito bouchard",
-    "dorrego 2520",
-    "cordoba 111",
-    "torre bbva",
-]
+# Fallback values if settings.json is missing (empty - user must configure)
+_DEFAULT_WORK_ADDRESSES = []
 
-_DEFAULT_HOME_ADDRESS = "juan bautista alberdi 1880"
+_DEFAULT_HOME_ADDRESS = ""
 
 
 def _load_settings():

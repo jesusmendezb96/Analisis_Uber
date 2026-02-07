@@ -1,0 +1,16 @@
+{
+    "work_addresses": [
+        "av. corrientes 1234",
+        "calle oficina 567",
+        "nombre de cliente"
+    ],
+    "home_address": "mi casa 890",
+    "personal_addresses": [
+        "direccion personal 1",
+        "direccion personal 2"
+    ],
+    "gmail": {
+        "search_query": "subject:\"Tu viaje\" (from:noreply@uber.com OR from:didi@ar.didiglobal.com)",
+        "receipts_dir": "receipts"
+    }
+}

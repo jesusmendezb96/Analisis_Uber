@@ -176,16 +176,14 @@ Las direcciones se configuran en `config/settings.json` o desde la web UI en `/s
 ```json
 {
     "work_addresses": [
-        "leandro n. alem 815",
-        "juana manso",
-        "hipolito bouchard",
-        "dorrego 2520"
+        "av. corrientes 1234",
+        "calle oficina 567"
     ],
-    "home_address": "juan bautista alberdi 1880"
+    "home_address": "mi casa 890"
 }
 ```
 
-Las direcciones se normalizan automaticamente: lowercase, sin acentos, sin prefijos (Av., Avenida, Calle).
+Copiar `config/settings.example.json` a `config/settings.json` y completar con las direcciones reales. Las direcciones se normalizan automaticamente: lowercase, sin acentos, sin prefijos (Av., Avenida, Calle).
 
 ## Archivos de Reintegro
 

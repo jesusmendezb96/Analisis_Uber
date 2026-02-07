@@ -146,15 +146,13 @@ Prioridad 3: Ninguna coincidencia -> None (needs_review = 1)
 - Remover todo despues de coma (ciudad, provincia)
 - Colapsar espacios multiples
 
-**Direcciones de trabajo** (en `config/settings.json`, con fallback hardcoded):
+**Direcciones de trabajo** se cargan desde `config/settings.json` (no versionado). Formato:
 ```
-leandro n. alem 815     # Oficina principal
-juana manso              # Puerto Madero (cualquier numero)
-hipolito bouchard        # Cliente Munro (cualquier numero, matchea con/sin tilde)
-dorrego 2520             # Cliente
-cordoba 111              # Oficina alternativa
-torre bbva               # Oficina alternativa
+direccion normalizada 1     # Oficina principal
+nombre de calle             # Matchea cualquier numero en esa calle
+otra direccion 123          # Cliente
 ```
+Ver `config/settings.example.json` para el formato esperado.
 
 **Error critico a evitar:** Casa <-> Trabajo = **LABURO** (no Personal). Este error costaria dinero en reintegros perdidos.
 

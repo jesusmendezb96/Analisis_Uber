@@ -1,6 +1,7 @@
-# Credenciales y tokens (NUNCA subir)
+# Credenciales, tokens y config con datos personales (NUNCA subir)
 config/credentials.json
 config/token.json
+config/settings.json
 
 # Base de datos
 data/*.db
