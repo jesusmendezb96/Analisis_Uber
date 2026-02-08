@@ -43,6 +43,10 @@ def save():
 
     save_settings(work, home, personal)
 
+    from services.database import log_activity
+    log_activity('settings_save',
+                 f'Configuracion actualizada: {len(work)} dir. trabajo, {len(personal)} dir. personales')
+
     return render_template('_alert.html',
         message='Configuracion guardada exitosamente',
         type='success'
@@ -79,6 +83,11 @@ def reset_all():
 
     # 5. Re-init empty database
     init_db()
+
+    from services.database import log_activity
+    log_activity('system_reset',
+                 f'Sistema reiniciado: {deleted["eml"]} emails eliminados, DB recreada',
+                 status='warning')
 
     msg = (f"Todo borrado: {deleted['eml']} emails, "
            f"{deleted['output']} archivos output, "

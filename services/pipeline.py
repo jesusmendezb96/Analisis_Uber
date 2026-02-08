@@ -83,6 +83,7 @@ def run_full_pipeline(download_gmail=False, after_date=None, task_id=None):
         from generar_reintegros import generate_reintegros
         pdf_result = generate_reintegros(use_db=True, task_id=task_id)
         stats['pdfs_generated'] = pdf_result.get('pdfs_generated', 0)
+        stats['pdfs_skipped'] = pdf_result.get('pdfs_skipped', 0)
 
         # Final summary
         print("\n" + "="*70)
@@ -93,13 +94,23 @@ def run_full_pipeline(download_gmail=False, after_date=None, task_id=None):
         print(f"  Duplicados ignorados: {stats['duplicates_skipped']}")
         print(f"  Viajes categorizados: {stats['trips_categorized']}")
         print(f"  PDFs generados: {stats['pdfs_generated']}")
+        if stats.get('pdfs_skipped', 0) > 0:
+            print(f"  PDFs ya existentes (omitidos): {stats['pdfs_skipped']}")
         print("="*70)
 
         finish_pipeline_run(run_id, stats)
 
+        from services.database import log_activity
+        log_activity('pipeline',
+                     f'Pipeline completado: {stats["trips_parsed"]} viajes, {stats["pdfs_generated"]} PDFs')
+
     except Exception as e:
         print(f"\n[X] Error en pipeline: {e}")
         finish_pipeline_run(run_id, stats, error=str(e))
+
+        from services.database import log_activity
+        log_activity('pipeline', f'Error en pipeline: {e}', status='error')
+
         raise
 
     return stats

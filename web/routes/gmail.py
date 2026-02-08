@@ -1,7 +1,9 @@
 """Gmail route - download receipts from Gmail."""
 from flask import Blueprint, render_template, request
-from services.database import get_downloaded_emails
+from services.database import get_downloaded_emails, log_activity
 from services import task_runner
+
+_logged_tasks = set()  # Avoid duplicate logs from htmx polling
 
 bp = Blueprint('gmail', __name__, url_prefix='/gmail')
 
@@ -54,11 +56,21 @@ def task_status(task_id):
         return '<div class="alert alert-warning">Tarea no encontrada</div>'
 
     if status['status'] == 'completed':
+        if task_id not in _logged_tasks:
+            _logged_tasks.add(task_id)
+            result = status.get('result', {})
+            count = result.get('downloaded', 0) if isinstance(result, dict) else 0
+            log_activity('gmail_download', f'{count} emails descargados desde Gmail')
+
         return render_template('_alert.html',
             message='Descarga completada. Recarga la pagina para ver los resultados.',
             type='success'
         )
     elif status['status'] == 'error':
+        if task_id not in _logged_tasks:
+            _logged_tasks.add(task_id)
+            log_activity('gmail_download', f'Error en descarga: {status["error"]}', status='error')
+
         return render_template('_alert.html',
             message=f'Error: {status["error"]}',
             type='danger'

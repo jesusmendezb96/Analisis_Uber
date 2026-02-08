@@ -1,8 +1,10 @@
 """Reports route - generate summary and PDFs."""
 from flask import Blueprint, render_template, send_file
 from pathlib import Path
-from services.database import get_summary_stats, get_all_trips
+from services.database import get_summary_stats, get_all_trips, log_activity
 from services import task_runner
+
+_logged_tasks = set()  # Avoid duplicate logs from htmx polling
 
 bp = Blueprint('reports', __name__, url_prefix='/reports')
 
@@ -31,6 +33,7 @@ def generate_summary():
     """Generate summary report."""
     from main import generate_summary as gen_summary
     gen_summary(use_db=True)
+    log_activity('generate_summary', 'Reporte summary.md generado')
 
     return render_template('_alert.html',
         message='Reporte generado: output/summary.md',
@@ -41,11 +44,15 @@ def generate_summary():
 @bp.route('/generate-pdfs', methods=['POST'])
 def generate_pdfs():
     """Start PDF generation (runs in background)."""
+    from flask import request
     from generar_reintegros import generate_reintegros
+
+    force = request.form.get('force_pdfs') == '1'
 
     tid = task_runner.submit(
         generate_reintegros,
         use_db=True,
+        force=force,
         description="Generando PDFs de reintegro"
     )
 
@@ -71,14 +78,34 @@ def task_status(task_id):
                 parts.append(f"{result['trips_categorized']} categorizados")
             if result.get('pdfs_generated'):
                 parts.append(f"{result['pdfs_generated']} PDFs generados")
+            if result.get('pdfs_skipped'):
+                parts.append(f"{result['pdfs_skipped']} PDFs ya existentes")
             message = 'Completado: ' + ', '.join(parts) if parts else 'Completado'
         else:
             message = 'Completado'
+
+        # Log once per task (htmx polls repeatedly)
+        if task_id not in _logged_tasks:
+            _logged_tasks.add(task_id)
+            desc = status.get('description', '')
+            if 'PDF' in desc:
+                pdfs = result.get('pdfs_generated', 0) if isinstance(result, dict) else 0
+                skipped = result.get('pdfs_skipped', 0) if isinstance(result, dict) else 0
+                log_activity('generate_pdfs', f'{pdfs} PDFs generados, {skipped} omitidos')
+            else:
+                log_activity('pipeline', message)
+
         return render_template('_alert.html',
             message=message,
             type='success'
         )
     elif status['status'] == 'error':
+        if task_id not in _logged_tasks:
+            _logged_tasks.add(task_id)
+            desc = status.get('description', '')
+            action = 'generate_pdfs' if 'PDF' in desc else 'pipeline'
+            log_activity(action, f'Error: {status["error"]}', status='error')
+
         return render_template('_alert.html',
             message=f'Error: {status["error"]}',
             type='danger'

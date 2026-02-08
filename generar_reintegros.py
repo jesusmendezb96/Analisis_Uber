@@ -104,13 +104,14 @@ def _parse_date_flexible(date_str):
         return None
 
 
-def generate_reintegros(use_db=False, task_id=None):
+def generate_reintegros(use_db=False, task_id=None, force=False):
     """
     Main function to generate reintegro PDFs and CSV.
 
     Args:
         use_db: If True, read trips from SQLite database
         task_id: Optional task_id for progress reporting
+        force: If True, regenerate all PDFs even if they already exist
     """
     # Load trips
     if use_db:
@@ -118,7 +119,7 @@ def generate_reintegros(use_db=False, task_id=None):
         rows = get_all_trips(category_filter='Laburo')
         if not rows:
             print("[!] No hay viajes categorizados como 'Laburo' en la base de datos")
-            return {'pdfs_generated': 0}
+            return {'pdfs_generated': 0, 'pdfs_skipped': 0}
 
         laburo_trips = []
         for row in rows:
@@ -136,7 +137,7 @@ def generate_reintegros(use_db=False, task_id=None):
         if not csv_path.exists():
             print("[X] Error: output/uber_trips.csv no encontrado")
             print("    Ejecuta primero: python main.py")
-            return {'pdfs_generated': 0}
+            return {'pdfs_generated': 0, 'pdfs_skipped': 0}
 
         with open(csv_path, 'r', encoding='utf-8-sig') as f:
             first_line = f.readline()
@@ -147,7 +148,7 @@ def generate_reintegros(use_db=False, task_id=None):
 
         if len(df_laburo) == 0:
             print("[!] No hay viajes categorizados como 'Laburo'")
-            return {'pdfs_generated': 0}
+            return {'pdfs_generated': 0, 'pdfs_skipped': 0}
 
         laburo_trips = df_laburo.to_dict('records')
 
@@ -171,6 +172,7 @@ def generate_reintegros(use_db=False, task_id=None):
     receipts_dir = Path('receipts')
     reintegro_data = []
     html_pdf_pairs = []
+    skipped_count = 0
 
     for counter, trip in enumerate(laburo_trips, start=1):
         filename = trip['filename']
@@ -199,6 +201,25 @@ def generate_reintegros(use_db=False, task_id=None):
 
         html_path = htmls_dir / html_filename
         pdf_path = reintegros_dir / pdf_filename
+
+        # Skip if PDF already exists (unless force=True)
+        if not force and pdf_path.exists():
+            print(f"  [SKIP] PDF ya existe: {pdf_filename}")
+            # Still collect reintegro data for CSV even if PDF exists
+            origin_str = str(trip.get('origin', ''))
+            dest_str = str(trip.get('destination', ''))
+            reintegro_data.append({
+                'Fecha': date_display,
+                'Tipo_Gasto': 'Taxi',
+                'Servicio': service,
+                'Monto': f"{amount:.2f}",
+                'Moneda': currency,
+                'Archivo_PDF': pdf_filename,
+                'Origen': origin_str[:60] + '...' if len(origin_str) > 60 else origin_str,
+                'Destino': dest_str[:60] + '...' if len(dest_str) > 60 else dest_str,
+            })
+            skipped_count += 1
+            continue
 
         # Extract HTML
         print(f"Procesando: {filename}")
@@ -234,11 +255,15 @@ def generate_reintegros(use_db=False, task_id=None):
 
     # Batch convert all HTMLs to PDFs (single browser instance)
     if html_pdf_pairs:
-        print(f"\nGenerando {len(html_pdf_pairs)} PDFs...")
+        print(f"\nGenerando {len(html_pdf_pairs)} PDFs nuevos...")
+        if skipped_count > 0:
+            print(f"  ({skipped_count} PDFs ya existentes omitidos)")
         pdf_count = convert_htmls_to_pdfs(html_pdf_pairs, task_id=task_id)
         print(f"[OK] {pdf_count} PDFs generados exitosamente")
     else:
         pdf_count = 0
+        if skipped_count > 0:
+            print(f"\n[OK] Todos los PDFs ya existen ({skipped_count} omitidos). Nada que generar.")
 
     # Generate CSV and instructions
     if reintegro_data:
@@ -304,7 +329,7 @@ def generate_reintegros(use_db=False, task_id=None):
     else:
         print("\n[!] No se generaron archivos. Revisa los errores arriba.")
 
-    return {'pdfs_generated': pdf_count, 'total_amount': total_amount}
+    return {'pdfs_generated': pdf_count, 'pdfs_skipped': skipped_count, 'total_amount': total_amount}
 
 
 if __name__ == '__main__':

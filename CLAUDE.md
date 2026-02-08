@@ -2,8 +2,8 @@
 
 > Documento interno para desarrollo con Claude Code. Contiene arquitectura, decisiones tecnicas, logica de negocio y guia de mantenimiento.
 
-**Version:** 2.0
-**Ultima actualizacion:** 2026-02-07
+**Version:** 2.1
+**Ultima actualizacion:** 2026-02-08
 **Status:** Produccion
 
 ---
@@ -65,7 +65,7 @@ Analisis_Uber/
 ├── config/                          # Configuracion (excluido de git excepto settings.json)
 │   ├── credentials.json             # Gmail OAuth client secret (usuario provee, NO en git)
 │   ├── token.json                   # Auto-generado por OAuth flow (NO en git)
-│   └── settings.json                # Direcciones de trabajo/casa (SI en git)
+│   └── settings.json                # Direcciones de trabajo/casa (NO en git, local)
 │
 ├── data/                            # Base de datos (NO en git)
 │   └── expense_tracker.db           # SQLite - fuente de verdad en modo v2
@@ -180,6 +180,8 @@ subject:"Tu viaje" (from:noreply@uber.com OR from:didi@ar.didiglobal.com)
 
 **Batch mode:** Una sola instancia de Chromium para todos los PDFs (vs crear/destruir browser por cada uno).
 
+**Skip de PDFs existentes:** Antes de generar cada PDF, verifica si ya existe en `reintegros/`. Si existe, lo omite (no abre Playwright). Parametro `force=True` para regenerar todos. En la web, checkbox "Regenerar todos (sobreescribir existentes)".
+
 **Naming:** `{counter:02d}_{YYYYMMDD}_{service}_{currency}_{amount:.0f}.pdf`
 - Counter es secuencial en orden cronologico (facilita carga en formularios web)
 
@@ -229,6 +231,15 @@ pipeline_runs (
     pdfs_generated  INTEGER,
     error_message   TEXT
 )
+
+activity_log (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp       TEXT,                   -- hora local (Python datetime.now())
+    action_type     TEXT NOT NULL,          -- 'pipeline', 'gmail_download', 'generate_pdfs', etc.
+    description     TEXT NOT NULL,          -- descripcion legible de la operacion
+    status          TEXT DEFAULT 'success', -- 'success', 'error', 'warning'
+    details         TEXT                    -- metadata opcional
+)
 ```
 
 ### 3.2 Formato de Fechas
@@ -245,7 +256,7 @@ pipeline_runs (
 
 | Metodo | Ruta | Funcion | Response |
 |--------|------|---------|----------|
-| GET | `/` | Dashboard con stats | HTML completo |
+| GET | `/` | Dashboard con stats + registro de actividad | HTML completo |
 | GET | `/trips/` | Lista de viajes con filtros | HTML completo |
 | POST | `/trips/<id>/category` | Actualizar categoria | Partial `_trip_row.html` (htmx swap) |
 | POST | `/trips/auto-categorize` | Auto-categorizar todos | HX-Redirect a /trips |
@@ -332,6 +343,10 @@ python auto_categorize.py --db  # v2: categorizar en SQLite
 8. **Fechas en DB:** Siempre `YYYY-MM-DD`. En CSV legacy: `DD/MM/YYYY`
 9. **`parser.py`:** `extract_html_from_eml()` (publica) wrappea `_extract_html_from_eml()` (privada)
 10. **Playwright batch:** `convert_htmls_to_pdfs()` recibe lista de `(html, pdf_path)` tuples
+11. **PDF skip:** `generate_reintegros(force=False)` omite PDFs existentes. Checkbox en web para forzar regeneracion
+12. **Activity log:** `log_activity(action_type, description)` registra operaciones. Se muestra en Dashboard
+13. **Timestamps:** `log_activity()` usa `datetime.now()` de Python (hora local), NO `datetime('now')` de SQLite (UTC)
+14. **Testing:** NUNCA hacer POST a `/settings/save` o `/settings/reset` en tests automatizados (destruye datos reales)
 
 ---
 

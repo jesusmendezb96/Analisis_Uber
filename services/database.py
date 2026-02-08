@@ -76,9 +76,19 @@ def init_db():
                 error_message TEXT
             );
 
+            CREATE TABLE IF NOT EXISTS activity_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp TEXT DEFAULT (datetime('now', 'localtime')),
+                action_type TEXT NOT NULL,
+                description TEXT NOT NULL,
+                status TEXT DEFAULT 'success',
+                details TEXT
+            );
+
             CREATE INDEX IF NOT EXISTS idx_trips_date ON trips(date);
             CREATE INDEX IF NOT EXISTS idx_trips_category ON trips(category);
             CREATE INDEX IF NOT EXISTS idx_trips_service ON trips(service);
+            CREATE INDEX IF NOT EXISTS idx_activity_log_timestamp ON activity_log(timestamp DESC);
         """)
 
 
@@ -375,5 +385,32 @@ def get_pipeline_runs(limit=10):
     with get_connection() as conn:
         rows = conn.execute(
             "SELECT * FROM pipeline_runs ORDER BY started_at DESC LIMIT ?", (limit,)
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+
+def log_activity(action_type, description, status='success', details=None):
+    """
+    Log an activity to the activity_log table.
+
+    Args:
+        action_type: e.g. 'pipeline', 'gmail_download', 'generate_pdfs', etc.
+        description: Human-readable description of what happened
+        status: 'success', 'error', or 'warning'
+        details: Optional string with extra info
+    """
+    now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    with get_connection() as conn:
+        conn.execute(
+            "INSERT INTO activity_log (timestamp, action_type, description, status, details) VALUES (?, ?, ?, ?, ?)",
+            (now, action_type, description, status, details)
+        )
+
+
+def get_activity_log(limit=15):
+    """Get recent activity log entries."""
+    with get_connection() as conn:
+        rows = conn.execute(
+            "SELECT * FROM activity_log ORDER BY id DESC LIMIT ?", (limit,)
         ).fetchall()
         return [dict(row) for row in rows]

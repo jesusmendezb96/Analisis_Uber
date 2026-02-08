@@ -212,4 +212,73 @@
 </div>
 {% endif %}
 
+<!-- Activity Log -->
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">Registro de Actividad</h5>
+                {% if activity_log %}
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover mb-0">
+                        <thead>
+                            <tr>
+                                <th style="width: 140px;">Fecha</th>
+                                <th style="width: 130px;">Tipo</th>
+                                <th>Descripcion</th>
+                                <th style="width: 70px;" class="text-center">Estado</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for log in activity_log %}
+                            <tr>
+                                <td>
+                                    <small class="text-muted">{{ log.timestamp[:16].replace('T', ' ') }}</small>
+                                </td>
+                                <td>
+                                    {% if log.action_type == 'pipeline' %}
+                                        <span class="badge bg-dark"><i class="bi bi-play-circle"></i> Pipeline</span>
+                                    {% elif log.action_type == 'gmail_download' %}
+                                        <span class="badge bg-info"><i class="bi bi-envelope"></i> Gmail</span>
+                                    {% elif log.action_type == 'auto_categorize' %}
+                                        <span class="badge bg-primary"><i class="bi bi-magic"></i> Auto-cat</span>
+                                    {% elif log.action_type == 'manual_categorize' %}
+                                        <span class="badge bg-secondary"><i class="bi bi-pencil"></i> Edicion</span>
+                                    {% elif log.action_type == 'generate_pdfs' %}
+                                        <span class="badge bg-danger"><i class="bi bi-file-pdf"></i> PDFs</span>
+                                    {% elif log.action_type == 'generate_summary' %}
+                                        <span class="badge bg-info"><i class="bi bi-file-text"></i> Reporte</span>
+                                    {% elif log.action_type == 'export_csv' %}
+                                        <span class="badge bg-success"><i class="bi bi-download"></i> Export</span>
+                                    {% elif log.action_type == 'settings_save' %}
+                                        <span class="badge bg-secondary"><i class="bi bi-gear"></i> Config</span>
+                                    {% elif log.action_type == 'system_reset' %}
+                                        <span class="badge bg-warning text-dark"><i class="bi bi-trash"></i> Reset</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">{{ log.action_type }}</span>
+                                    {% endif %}
+                                </td>
+                                <td>{{ log.description }}</td>
+                                <td class="text-center">
+                                    {% if log.status == 'success' %}
+                                        <i class="bi bi-check-circle-fill text-success"></i>
+                                    {% elif log.status == 'error' %}
+                                        <i class="bi bi-x-circle-fill text-danger"></i>
+                                    {% elif log.status == 'warning' %}
+                                        <i class="bi bi-exclamation-triangle-fill text-warning"></i>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p class="text-muted mb-0">No hay actividad registrada aun.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
 {% endblock %}

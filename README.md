@@ -11,7 +11,8 @@ Incluye interfaz web local, integracion con Gmail API para descarga automatica, 
 - **Deduplicacion automatica** via constraints de base de datos
 - **Auto-categorizacion** de viajes (Laburo/Personal) basada en direcciones configurables
 - **Interfaz web** local con Bootstrap + htmx para revision y edicion de categorias
-- **Generacion de PDFs** con Playwright (Chromium headless, batch optimizado)
+- **Generacion de PDFs** con Playwright (Chromium headless, batch optimizado, skip de existentes)
+- **Registro de actividad** en el dashboard con historial de todas las operaciones
 - **Pipeline unificado** que ejecuta todo el flujo con un click o un comando
 - **CLI backward-compatible** con el flujo manual original
 
@@ -61,10 +62,10 @@ python main.py --web
 
 Abre http://localhost:5000 con:
 
-- **Dashboard** - Estadisticas generales, desglose por mes, acciones rapidas
+- **Dashboard** - Estadisticas generales, desglose por mes, registro de actividad
 - **Viajes** - Tabla completa con edicion inline de categorias (dropdown por fila)
 - **Gmail** - Descargar recibos con selector de fecha
-- **Reportes** - Generar summary, PDFs, o ejecutar pipeline completo
+- **Reportes** - Generar summary, PDFs (con skip de existentes), o ejecutar pipeline completo
 - **Configuracion** - Editar direcciones de trabajo/casa, resetear datos
 
 ### Opcion B: Pipeline automatizado por CLI
@@ -153,11 +154,12 @@ Analisis_Uber/
 
 ### Base de Datos
 
-SQLite con WAL mode. Tres tablas:
+SQLite con WAL mode. Cuatro tablas:
 
 - **trips** - Viajes con deduplicacion `UNIQUE(date, service, amount, origin, destination)`
 - **downloaded_emails** - Tracking de emails descargados (evita re-descargas)
 - **pipeline_runs** - Historial de ejecuciones del pipeline
+- **activity_log** - Registro de todas las operaciones (visible en Dashboard)
 
 Fechas almacenadas como `YYYY-MM-DD` (ISO 8601).
 
@@ -209,6 +211,7 @@ El CSV de reintegro incluye: Fecha, Tipo_Gasto, Servicio, Monto, Moneda, Archivo
 | Playwright no instalado | `pip install playwright && python -m playwright install chromium` |
 | Gmail descarga emails que no son recibos | El filtro usa `subject:"Tu viaje"` + keywords anti-promo. Verificar en `/settings` |
 | Direccion de trabajo no reconocida | Agregar en `config/settings.json` o desde la web en `/settings` (normalizada, sin acentos) |
+| PDFs no se regeneran al presionar "Generar PDFs" | Los PDFs existentes se omiten automaticamente. Marcar "Regenerar todos" para forzar |
 
 ## Privacidad y Seguridad
 

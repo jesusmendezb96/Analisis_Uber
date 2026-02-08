@@ -2,7 +2,7 @@
 from flask import Blueprint, render_template, request, jsonify
 from services.database import (
     get_all_trips, get_available_months, update_trip_category,
-    get_trip_by_id, export_to_csv, get_summary_stats
+    get_trip_by_id, export_to_csv, get_summary_stats, log_activity
 )
 from services.categorizer import categorize_all_trips
 from pathlib import Path
@@ -46,6 +46,7 @@ def update_category(trip_id):
     """Update trip category (htmx endpoint)."""
     category = request.form.get('category', '')
     update_trip_category(trip_id, category)
+    log_activity('manual_categorize', f'Viaje #{trip_id} categorizado como {category or "sin categoria"}')
 
     trip = get_trip_by_id(trip_id)
     if not trip:
@@ -59,6 +60,8 @@ def update_category(trip_id):
 def auto_categorize():
     """Auto-categorize all uncategorized trips."""
     stats = categorize_all_trips()
+    log_activity('auto_categorize',
+                 f'{stats["categorized"]} viajes auto-categorizados (Laburo: {stats["work"]}, Personal: {stats["personal"]})')
 
     # Return htmx redirect to refresh the page
     return '', 200, {'HX-Redirect': '/trips'}
@@ -70,6 +73,7 @@ def export_csv():
     output_path = Path('output/uber_trips_export.csv')
     output_path.parent.mkdir(exist_ok=True)
     export_to_csv(str(output_path))
+    log_activity('export_csv', f'CSV exportado a {output_path}')
 
     return render_template('_alert.html',
         message=f'CSV exportado: {output_path}',
