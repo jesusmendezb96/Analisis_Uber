@@ -26,7 +26,7 @@ def index():
 @bp.route('/download', methods=['POST'])
 def download():
     """Start Gmail download (runs in background)."""
-    from services.gmail_service import is_configured, download_new_receipts
+    from services.gmail_service import is_configured, validate_credentials, download_new_receipts
 
     if not is_configured():
         return render_template('_alert.html',
@@ -34,9 +34,13 @@ def download():
             type='danger'
         )
 
-    after_date = request.form.get('after_date', None)
-    if not after_date:
-        after_date = None
+    # Pre-flight: validate credentials synchronously before dispatching to background.
+    # Catches expired/revoked tokens with an actionable error message.
+    valid, error = validate_credentials()
+    if not valid:
+        return render_template('_alert.html', message=error, type='danger')
+
+    after_date = request.form.get('after_date') or None
 
     tid = task_runner.submit(
         download_new_receipts,
