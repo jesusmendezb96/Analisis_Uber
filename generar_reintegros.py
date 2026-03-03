@@ -60,9 +60,13 @@ def convert_htmls_to_pdfs(html_pdf_pairs, task_id=None):
 
             for i, (html_content, pdf_path) in enumerate(html_pdf_pairs):
                 try:
-                    page.set_content(html_content, wait_until='networkidle')
+                    # Use absolute path to avoid CWD ambiguity in background threads
+                    abs_pdf_path = Path(pdf_path).absolute()
+                    # timeout=20s: Uber HTML has external resources; domcontentloaded
+                    # is faster and sufficient for PDF rendering
+                    page.set_content(html_content, wait_until='domcontentloaded', timeout=20000)
                     page.pdf(
-                        path=str(pdf_path),
+                        path=str(abs_pdf_path),
                         format='A4',
                         margin={'top': '1cm', 'right': '1cm', 'bottom': '1cm', 'left': '1cm'},
                         print_background=True,

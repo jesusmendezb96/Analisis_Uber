@@ -60,9 +60,11 @@ def normalize_address(addr):
     addr = addr.replace('\u00e1', 'a').replace('\u00e9', 'e').replace('\u00ed', 'i')
     addr = addr.replace('\u00f3', 'o').replace('\u00fa', 'u').replace('\u00f1', 'n')
     # Remove common abbreviations and punctuation
-    addr = re.sub(r'\bav\.\s*', '', addr)
+    addr = re.sub(r'\bav\.?\s*', '', addr)
     addr = re.sub(r'\bavenida\s*', '', addr)
     addr = re.sub(r'\bcalle\s*', '', addr)
+    addr = re.sub(r'\bgral\.?\s*', '', addr)
+    addr = re.sub(r'\bgeneral\s*', '', addr)
     addr = re.sub(r',.*', '', addr)  # Remove everything after comma
     addr = re.sub(r'\s+', ' ', addr)  # Normalize spaces
     return addr.strip()
@@ -82,16 +84,16 @@ def categorize_trip(origin, destination):
     origin_norm = normalize_address(origin)
     destination_norm = normalize_address(destination)
 
-    work_addresses = get_work_addresses()
-    home_address = get_home_address()
+    work_addresses = [normalize_address(w) for w in get_work_addresses()]
+    home_address = normalize_address(get_home_address())
 
     # Priority 1: Check if any work address is involved
     for work_addr in work_addresses:
-        if work_addr in origin_norm or work_addr in destination_norm:
+        if work_addr and (work_addr in origin_norm or work_addr in destination_norm):
             return 'Laburo'
 
     # Priority 2: If trip involves home but no work address, it's personal
-    if home_address in origin_norm or home_address in destination_norm:
+    if home_address and (home_address in origin_norm or home_address in destination_norm):
         return 'Personal'
 
     # Priority 3: Unknown - needs manual review

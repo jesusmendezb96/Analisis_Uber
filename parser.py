@@ -5,11 +5,15 @@ Extracts: date, origin, destination, amount, currency
 """
 import email
 from email import policy
+from email.utils import parsedate_to_datetime
 from pathlib import Path
 from bs4 import BeautifulSoup
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 import re
 from decimal import Decimal
+
+# Argentina is UTC-3 and does not observe DST
+_AR_TZ = timezone(timedelta(hours=-3))
 
 
 def parse_receipt(file_path):
@@ -121,11 +125,13 @@ def _parse_uber(file_path, soup, email_msg):
     # Extract date from email header
     if email_msg and email_msg.get('date'):
         try:
-            # Parse email date
+            # Uber sends emails with UTC timestamps (+0000).
+            # We must convert to Argentina local time (UTC-3) before extracting the date,
+            # otherwise night trips (after 21:00 AR) fall on the next calendar day.
             date_str = email_msg['date']
-            # Remove timezone info for simpler parsing
-            date_obj = datetime.strptime(date_str.split('+')[0].split('-')[0].strip(), '%a, %d %b %Y %H:%M:%S')
-            data['date'] = date_obj.strftime('%Y-%m-%d')
+            aware_dt = parsedate_to_datetime(date_str)
+            ar_dt = aware_dt.astimezone(_AR_TZ)
+            data['date'] = ar_dt.strftime('%Y-%m-%d')
         except:
             pass
 

@@ -190,10 +190,12 @@ def get_trip_by_id(trip_id):
 
 
 def update_trip_category(trip_id, category):
-    """Update the category of a trip."""
+    """Update the category of a trip. Marks as manually set (auto_categorized=0)
+    so the auto-categorizer will not override it on subsequent pipeline runs."""
     with get_connection() as conn:
         conn.execute("""
-            UPDATE trips SET category = ?, needs_review = 0, updated_at = datetime('now')
+            UPDATE trips SET category = ?, needs_review = 0, auto_categorized = 0,
+                updated_at = datetime('now')
             WHERE id = ?
         """, (category, trip_id))
 

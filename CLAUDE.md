@@ -2,8 +2,8 @@
 
 > Documento interno para desarrollo con Claude Code. Contiene arquitectura, decisiones tecnicas, logica de negocio y guia de mantenimiento.
 
-**Version:** 2.1
-**Ultima actualizacion:** 2026-02-08
+**Version:** 2.2
+**Ultima actualizacion:** 2026-03-02
 **Status:** Produccion
 
 ---
@@ -30,12 +30,15 @@ receipts/*.eml (archivos raw)
 [parser.py] -- BeautifulSoup4 --> Extrae: fecha, origen, destino, monto, moneda, servicio
     |                              Uber: data-testid attrs + address-point-desc class
     |                              Didi: text parsing con regex (fechas en espanol, montos con $)
+    |                              FECHA: parsedate_to_datetime() -> convertir a AR (UTC-3) antes de extraer
     v
 [database.py] -- SQLite WAL --> data/expense_tracker.db
     |                            UNIQUE(date, service, amount, origin, destination) = deduplicacion
+    |                            parse_all_receipts() skipea filenames ya en la tabla trips
     v
 [categorizer.py] -- config/settings.json --> Laburo / Personal / needs_review
     |                                         Regla: work_address en origin OR destination = Laburo
+    |                                         Categorias manuales (auto_categorized=0) NO se sobreescriben
     v
 [main.py --summary] --> output/summary.md (Markdown con totales por categoria/mes/servicio)
     |
@@ -103,7 +106,8 @@ Analisis_Uber/
 ├── generar_reintegros.py            # Generador de PDFs (CSV o DB mode)
 ├── auto_categorize.py               # Wrapper legacy de services/categorizer
 ├── migrate_csv.py                   # Migracion unica CSV -> SQLite
-├── run_web.py                       # Entry point web (abre browser)
+├── run_web.py                       # Entry point web (abre browser en puerto 5100)
+├── start_app.bat                    # Launcher Windows (cd correcto + python run_web.py)
 ├── requirements.txt                 # Dependencias Python
 └── .gitignore                       # Excluye: credentials, token, DB, receipts, output
 ```
@@ -122,12 +126,15 @@ Analisis_Uber/
 **Uber** - Extraccion por data-testid attributes:
 - Monto: `data-testid="total_fare_amount"` -> regex `(ARS|USD|EUR)\s*\$?\s*([\d,]+\.?\d*)`
 - Direcciones: `class="address-point-desc"` (indice 0=origen, 1=destino)
-- Fecha: Header `Date` del email -> `%a, %d %b %Y %H:%M:%S`, fallback a `data-testid="payments_0_date_time"`
+- Fecha: `email.utils.parsedate_to_datetime(date_str)` -> `.astimezone(UTC-3)` -> `%Y-%m-%d`
+  - Fallback: `data-testid="payments_0_date_time"` (ya en hora local AR)
 
 **Didi** - Extraccion por text parsing:
 - Monto: Linea despues de "Total" -> regex `\$\s*([\d,]+\.?\d*)`
 - Direcciones: Despues de patrones de hora `\d{1,2}:\d{2}\s*(?:am|pm)`, tomar lineas siguientes
 - Fecha: Regex `(\d+)\s+(\w+)[,\s]+(\d{4})` con mapa de meses en espanol
+
+**CRITICO - Timezone:** Uber envia emails con header `Date` en UTC (`+0000`). Argentina es UTC-3. Un viaje a las 22:00 AR tiene timestamp UTC del dia siguiente. Usar siempre `parsedate_to_datetime()` y convertir a AR antes de extraer la fecha. Si se stripea el timezone sin convertir, los viajes nocturnos quedan guardados con fecha incorrecta (+1 dia).
 
 ### 2.2 Categorizacion (`services/categorizer.py`)
 
@@ -142,9 +149,14 @@ Prioridad 3: Ninguna coincidencia -> None (needs_review = 1)
 **Normalizacion de direcciones** (`normalize_address()`):
 - Lowercase
 - Remover acentos: a/e/i/o/u/n
-- Remover prefijos: "av.", "avenida", "calle"
+- Remover prefijos: "av.", "avenida", "calle", "gral.", "general"
 - Remover todo despues de coma (ciudad, provincia)
 - Colapsar espacios multiples
+
+**Categorias manuales vs auto:** El flag `auto_categorized` controla si el pipeline puede sobreescribir:
+- `auto_categorized = 1`: trip fue categorizado automaticamente, puede ser re-categorizado por el pipeline
+- `auto_categorized = 0`: trip fue categorizado manualmente por el usuario, el pipeline lo **skipea**
+- `update_trip_category()` siempre setea `auto_categorized = 0` para preservar la decision del usuario
 
 **Direcciones de trabajo** se cargan desde `config/settings.json` (no versionado). Formato:
 ```
@@ -158,9 +170,13 @@ Ver `config/settings.example.json` para el formato esperado.
 
 ### 2.3 Deduplicacion
 
-**En modo DB:** `UNIQUE(date, service, amount, origin, destination)` + `INSERT OR IGNORE`. SQLite maneja colisiones automaticamente.
+**En modo DB:** Dos niveles de deduplicacion:
+1. **Por filename:** `parse_all_receipts(use_db=True)` saltea archivos cuyo `filename` ya existe en la tabla `trips`. Previene re-parseo en cada pipeline run.
+2. **Por contenido:** `UNIQUE(date, service, amount, origin, destination)` + `INSERT OR IGNORE`. Cubre casos donde el mismo viaje llega con distinto filename.
 
 **En modo CSV legacy:** Key compuesta `date|service|amount|origin|destination`, `drop_duplicates(keep='first')`.
+
+**CRITICO:** Si se corrigen fechas en la DB manualmente y despues se re-ejecuta el pipeline con el servidor Flask viejo en memoria (sin reiniciar), el parser viejo puede retornar fechas diferentes a las corregidas, bypasseando el UNIQUE constraint e insertando duplicados. **Siempre reiniciar el servidor despues de cambios en parser.py.**
 
 ### 2.4 Gmail API (`services/gmail_service.py`)
 
@@ -176,16 +192,23 @@ subject:"Tu viaje" (from:noreply@uber.com OR from:didi@ar.didiglobal.com)
 
 **Auth flow:** OAuth2 con scope `gmail.readonly`. Primera vez abre browser, despues auto-refresh via `token.json`.
 
+**Filenames de .eml:** Generados desde el subject del email con `safe_subject` (solo alfanumerico + espacios). Subjects con no-breaking spaces (`\xa0`) producen palabras concatenadas (ej: `Tu viajeUber del...`). No afecta el parsing ya que la deteccion de servicio usa el header `From`, no el filename.
+
 ### 2.5 Generacion de PDFs (`generar_reintegros.py`)
 
-**Batch mode:** Una sola instancia de Chromium para todos los PDFs (vs crear/destruir browser por cada uno).
+**Batch mode:** Una sola instancia de Chromium para todos los PDFs.
 
-**Skip de PDFs existentes:** Antes de generar cada PDF, verifica si ya existe en `reintegros/`. Si existe, lo omite (no abre Playwright). Parametro `force=True` para regenerar todos. En la web, checkbox "Regenerar todos (sobreescribir existentes)".
+**Skip de PDFs existentes:** Antes de generar cada PDF, verifica si ya existe en `reintegros/`. Si existe, lo omite. Parametro `force=True` para regenerar todos. En la web, checkbox "Regenerar todos (sobreescribir existentes)".
 
 **Naming:** `{counter:02d}_{YYYYMMDD}_{service}_{currency}_{amount:.0f}.pdf`
-- Counter es secuencial en orden cronologico (facilita carga en formularios web)
+- Counter es secuencial en orden cronologico. Si cambia la cantidad de Laburo trips (nuevos o reclasificados), los counters cambian y los PDFs viejos con counter incorrecto quedan huerfanos. Usar `force=True` despues de cambios de categorizacion.
 
 **Settings PDF:** A4, margins 1cm, `print_background=True` para colores/imagenes.
+
+**Playwright en background threads:** Funciona correctamente en `ThreadPoolExecutor`. Usar:
+- `wait_until='domcontentloaded'` (no `networkidle`) para evitar bloqueos por recursos externos en el HTML del email
+- `timeout=20000` (20s)
+- `Path(pdf_path).absolute()` para evitar ambiguedad de CWD
 
 ---
 
@@ -198,13 +221,13 @@ trips (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     filename        TEXT NOT NULL,
     service         TEXT NOT NULL,           -- 'Uber' o 'Didi'
-    date            TEXT NOT NULL,           -- formato YYYY-MM-DD
+    date            TEXT NOT NULL,           -- formato YYYY-MM-DD (hora local AR, no UTC)
     origin          TEXT,
     destination     TEXT,
     amount          REAL NOT NULL,
     currency        TEXT DEFAULT 'ARS',
     category        TEXT DEFAULT '',         -- 'Laburo', 'Personal', o ''
-    auto_categorized INTEGER DEFAULT 0,     -- 1 si fue auto-categorizado
+    auto_categorized INTEGER DEFAULT 0,     -- 1=auto (pipeline puede sobreescribir), 0=manual (no tocar)
     needs_review    INTEGER DEFAULT 0,      -- 1 si necesita revision manual
     created_at      TEXT,
     updated_at      TEXT,
@@ -216,12 +239,12 @@ downloaded_emails (
     subject         TEXT,
     sender          TEXT,
     filename        TEXT,                   -- nombre del .eml guardado
-    downloaded_at   TEXT
+    downloaded_at   TEXT DEFAULT (datetime('now'))
 )
 
 pipeline_runs (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
-    started_at      TEXT,
+    started_at      TEXT DEFAULT (datetime('now')),
     finished_at     TEXT,
     status          TEXT,                   -- 'running', 'completed', 'error'
     emails_downloaded INTEGER,
@@ -244,7 +267,7 @@ activity_log (
 
 ### 3.2 Formato de Fechas
 
-- **En DB:** `YYYY-MM-DD` (ISO 8601, permite ORDER BY directo)
+- **En DB:** `YYYY-MM-DD` en **hora local Argentina (UTC-3)**, no UTC
 - **En CSV legacy:** `DD/MM/YYYY` (formato Excel español)
 - **Migracion:** `migrate_csv.py` convierte DD/MM/YYYY -> YYYY-MM-DD
 
@@ -294,6 +317,11 @@ Al cambiar el dropdown, htmx hace POST, el server devuelve la fila completa actu
 3. El polling endpoint chequea `task_runner.get_status(task_id)`
 4. Cuando completa, devuelve `_alert.html` con resultado (htmx deja de pollear)
 
+### 4.4 Puerto y Recarga
+
+- **Puerto:** `5100` (definido en `run_web.py` y `start_app.bat`)
+- **Auto-reload:** `debug=False` — el servidor **NO recarga automaticamente** al editar archivos Python. Despues de cualquier cambio de codigo, reiniciar el servidor (Ctrl+C + `start_app.bat`).
+
 ---
 
 ## 5. CLI - Modos de Uso
@@ -305,7 +333,7 @@ python main.py --db             # v2: parse -> SQLite
 python main.py --summary --db   # v2: SQLite -> summary.md
 python main.py --download       # v2: Gmail API -> receipts/*.eml
 python main.py --pipeline       # v2: download + parse + categorize + summary + PDFs
-python main.py --web            # v2: Flask en localhost:5000
+python main.py --web            # v2: Flask en localhost:5100
 python run_web.py               # v2: igual que --web (abre browser automaticamente)
 python migrate_csv.py           # Migracion unica CSV -> SQLite
 python auto_categorize.py       # v1: categorizar CSV directo
@@ -325,7 +353,12 @@ python auto_categorize.py --db  # v2: categorizar en SQLite
 | WeasyPrint falla | Requiere GTK en Windows | Reemplazado por Playwright |
 | Playwright lento con N PDFs | N instancias de browser | Batch mode: 1 browser para todos |
 | Gmail descarga promos | Query `from:` es muy amplio | Filtro `subject:"Tu viaje"` + keywords anti-promo |
-| "Alferez" vs "Alferez" (tilde) | Variaciones en direcciones | `normalize_address()` remueve acentos |
+| "Alferez" vs "Alferez" (tilde) | Variaciones en direcciones | `normalize_address()` remueve acentos y prefijos |
+| Viajes nocturnos con fecha +1 dia | Uber envia Date header en UTC; stripear TZ sin convertir | `parsedate_to_datetime()` + `.astimezone(UTC-3)` |
+| Duplicados en DB tras fix de parser | Flask cached old parser; pipeline re-parseaba todos los .eml | `parse_all_receipts` skipea filenames ya en DB; reiniciar server tras cambios |
+| Categorizacion manual sobreescrita | `update_trip_category` no reseteaba `auto_categorized` | Ahora setea `auto_categorized=0`; el pipeline respeta categorias manuales |
+| PDFs faltantes en background thread | `networkidle` bloqueaba en recursos externos del HTML | Cambiado a `domcontentloaded` + timeout 20s + rutas absolutas |
+| Counter de PDFs incorrecto tras cambios | Nuevos trips cambian el orden; PDFs viejos con numero viejo quedan huerfanos | Regenerar con `force=True` despues de reclasificaciones |
 
 ---
 
@@ -340,13 +373,17 @@ python auto_categorize.py --db  # v2: categorizar en SQLite
 5. **No romper backward compat:** `python main.py` sin flags = comportamiento v1
 6. **Gmail requiere setup:** El usuario provee `config/credentials.json`
 7. **htmx:** No se necesita JavaScript custom para la UI interactiva
-8. **Fechas en DB:** Siempre `YYYY-MM-DD`. En CSV legacy: `DD/MM/YYYY`
+8. **Fechas en DB:** Siempre `YYYY-MM-DD` en **hora local Argentina (UTC-3)**, no UTC
 9. **`parser.py`:** `extract_html_from_eml()` (publica) wrappea `_extract_html_from_eml()` (privada)
 10. **Playwright batch:** `convert_htmls_to_pdfs()` recibe lista de `(html, pdf_path)` tuples
 11. **PDF skip:** `generate_reintegros(force=False)` omite PDFs existentes. Checkbox en web para forzar regeneracion
 12. **Activity log:** `log_activity(action_type, description)` registra operaciones. Se muestra en Dashboard
 13. **Timestamps:** `log_activity()` usa `datetime.now()` de Python (hora local), NO `datetime('now')` de SQLite (UTC)
 14. **Testing:** NUNCA hacer POST a `/settings/save` o `/settings/reset` en tests automatizados (destruye datos reales)
+15. **Flask no recarga:** `debug=False` — despues de editar cualquier .py, el usuario DEBE reiniciar el servidor para que los cambios tomen efecto. Siempre avisar esto.
+16. **auto_categorized flag:** `0` = manual (pipeline no toca), `1` = auto (pipeline puede sobreescribir). `update_trip_category()` siempre setea a `0`.
+17. **parse_all_receipts en DB mode:** Solo parsea archivos cuyo filename NO esta ya en `trips`. Idempotente por diseno.
+18. **Puerto:** `5100` (no 5000)
 
 ---
 

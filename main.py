@@ -40,6 +40,20 @@ def parse_all_receipts(receipts_dir='receipts', output_dir='output', use_db=Fals
 
     print(f"Found {len(receipt_files)} receipt files\n")
 
+    # In DB mode, skip files already in the database (by filename).
+    # This prevents re-parsing on every pipeline run and avoids inserting
+    # duplicates if the parser behaviour ever changes (e.g. after a bug fix).
+    if use_db:
+        from services.database import init_db, get_connection
+        init_db()
+        with get_connection() as conn:
+            already_parsed = {r[0] for r in conn.execute('SELECT filename FROM trips').fetchall()}
+        receipt_files = [f for f in receipt_files if f.name not in already_parsed]
+        if not receipt_files:
+            print("[OK] No hay archivos nuevos para parsear (todos ya estan en la DB)")
+            return {'parsed': 0, 'inserted': 0, 'duplicates': 0}
+        print(f"[*] Archivos nuevos a parsear: {len(receipt_files)}\n")
+
     # Parse each receipt
     trips = []
     failed = []
