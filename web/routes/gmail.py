@@ -11,16 +11,46 @@ bp = Blueprint('gmail', __name__, url_prefix='/gmail')
 @bp.route('/')
 def index():
     """Gmail download page."""
-    from services.gmail_service import is_configured
+    from services.gmail_service import is_configured, validate_credentials
 
     downloaded = get_downloaded_emails()
     configured = is_configured()
+
+    token_valid = None
+    token_error = None
+    if configured:
+        token_valid, token_error = validate_credentials()
 
     return render_template('gmail.html',
         configured=configured,
         downloaded_emails=downloaded,
         total_downloaded=len(downloaded),
+        token_valid=token_valid,
+        token_error=token_error,
     )
+
+
+@bp.route('/authenticate', methods=['POST'])
+def authenticate():
+    """
+    Trigger OAuth flow to (re-)authenticate Gmail.
+    Opens the browser for consent and waits for the callback.
+    Runs synchronously — Flask is blocked while the user completes OAuth (~30s).
+    """
+    from services.gmail_service import get_gmail_service
+
+    try:
+        get_gmail_service()
+        log_activity('gmail_auth', 'Gmail re-autenticado correctamente')
+        return render_template('_alert.html',
+            message='Gmail autenticado correctamente. Ya puedes descargar recibos.',
+            type='success'
+        )
+    except Exception as e:
+        return render_template('_alert.html',
+            message=f'Error al autenticar Gmail: {e}',
+            type='danger'
+        )
 
 
 @bp.route('/download', methods=['POST'])

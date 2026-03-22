@@ -9,10 +9,38 @@
         <h5 class="card-title">Estado de conexion</h5>
         {% if configured %}
             <div class="d-flex align-items-center gap-2 mb-3">
-                <span class="badge bg-success">Configurado</span>
-                <span class="text-muted">credentials.json encontrado en config/</span>
+                {% if token_valid %}
+                    <span class="badge bg-success">Conectado</span>
+                    <span class="text-muted">Token de Gmail activo</span>
+                {% elif token_valid == false %}
+                    <span class="badge bg-warning text-dark">Token expirado</span>
+                    <span class="text-muted">credentials.json encontrado en config/</span>
+                {% else %}
+                    <span class="badge bg-success">Configurado</span>
+                    <span class="text-muted">credentials.json encontrado en config/</span>
+                {% endif %}
             </div>
 
+            {% if token_valid == false %}
+            <!-- Token expired: show re-auth panel -->
+            <div class="alert alert-warning d-flex align-items-start gap-3" id="auth-area">
+                <i class="bi bi-exclamation-triangle-fill fs-5 mt-1"></i>
+                <div class="flex-grow-1">
+                    <strong>Token de Gmail expirado</strong>
+                    <p class="mb-2 small">El token de autenticacion vencio (Google los revoca cada 7 dias en modo Testing). Haz clic en el boton para renovarlo — se abrira el navegador para que apruebes el acceso.</p>
+                    <form hx-post="/gmail/authenticate"
+                          hx-target="#auth-area"
+                          hx-swap="outerHTML"
+                          hx-indicator="#auth-spinner">
+                        <button type="submit" class="btn btn-warning btn-sm">
+                            <span id="auth-spinner" class="spinner-border spinner-border-sm htmx-indicator me-1"></span>
+                            <i class="bi bi-key"></i> Re-autenticar Gmail
+                        </button>
+                    </form>
+                </div>
+            </div>
+            {% else %}
+            <!-- Token OK: show download form -->
             <form hx-post="/gmail/download" hx-target="#download-area" hx-swap="innerHTML">
                 <div class="row g-2 align-items-end">
                     <div class="col-auto">
@@ -28,6 +56,8 @@
                 </div>
             </form>
             <div id="download-area" class="mt-3"></div>
+            {% endif %}
+
         {% else %}
             <div class="d-flex align-items-center gap-2 mb-3">
                 <span class="badge bg-danger">No configurado</span>
