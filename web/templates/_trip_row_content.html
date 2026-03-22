@@ -6,11 +6,11 @@
         {{ trip.service }}
     </span>
 </td>
-<td class="small" title="{{ trip.origin }}">
-    {{ trip.origin[:50] }}{% if trip.origin|length > 50 %}...{% endif %}
+<td class="small" title="{{ trip.origin or '' }}">
+    {{ (trip.origin or '')[:50] }}{% if (trip.origin or '')|length > 50 %}...{% endif %}
 </td>
-<td class="small" title="{{ trip.destination }}">
-    {{ trip.destination[:50] }}{% if trip.destination|length > 50 %}...{% endif %}
+<td class="small" title="{{ trip.destination or '' }}">
+    {{ (trip.destination or '')[:50] }}{% if (trip.destination or '')|length > 50 %}...{% endif %}
 </td>
 <td class="text-end">
     <strong>{{ trip.currency }} {{ "{:,.2f}".format(trip.amount) }}</strong>
