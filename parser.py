@@ -10,7 +10,6 @@ from pathlib import Path
 from bs4 import BeautifulSoup
 from datetime import datetime, timezone, timedelta
 import re
-from decimal import Decimal
 
 # Argentina is UTC-3 and does not observe DST
 _AR_TZ = timezone(timedelta(hours=-3))

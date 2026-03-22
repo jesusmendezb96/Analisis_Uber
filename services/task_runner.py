@@ -3,6 +3,7 @@
 Background task executor using ThreadPoolExecutor.
 Runs PDF generation and Gmail downloads without blocking the web UI.
 """
+import inspect
 import uuid
 import traceback
 from concurrent.futures import ThreadPoolExecutor
@@ -16,9 +17,14 @@ def submit(func, *args, description="Task", **kwargs):
     """
     Submit a function to run in the background.
 
+    Automatically injects task_id into kwargs if the function accepts it,
+    enabling progress reporting without manual wiring.
+
     Returns:
         task_id (str)
     """
+    cleanup_old_tasks(max_age_hours=1)
+
     task_id = str(uuid.uuid4())[:8]
     _tasks[task_id] = {
         'status': 'running',
@@ -29,6 +35,11 @@ def submit(func, *args, description="Task", **kwargs):
         'started_at': datetime.now().isoformat(),
         'finished_at': None,
     }
+
+    # Auto-inject task_id if the function accepts it
+    sig = inspect.signature(func)
+    if 'task_id' in sig.parameters and 'task_id' not in kwargs:
+        kwargs['task_id'] = task_id
 
     def wrapper():
         try:
