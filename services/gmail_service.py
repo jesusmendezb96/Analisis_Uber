@@ -4,6 +4,7 @@ Gmail API service for downloading Uber/Didi receipt emails.
 Uses OAuth2 for authentication (opens browser first time, then auto-refresh).
 """
 import base64
+import email as email_lib
 import json
 from pathlib import Path
 from datetime import datetime
@@ -14,6 +15,11 @@ TOKEN_PATH = CONFIG_DIR / 'token.json'
 RECEIPTS_DIR = Path(__file__).parent.parent / 'receipts'
 
 SCOPES = ['https://www.googleapis.com/auth/gmail.readonly']
+
+_REAUTH_MSG = (
+    "Token de Gmail expirado o revocado. Para re-autenticar, ejecuta desde CLI:\n"
+    '  python -c "from services.gmail_service import get_gmail_service; get_gmail_service()"'
+)
 
 
 def _load_gmail_config():
@@ -30,6 +36,49 @@ def _load_gmail_config():
 def is_configured():
     """Check if Gmail API credentials are set up."""
     return CREDENTIALS_PATH.exists()
+
+
+def validate_credentials():
+    """
+    Validate existing credentials WITHOUT triggering OAuth browser flow.
+    Use this for pre-flight checks from the web UI.
+
+    Returns:
+        (is_valid: bool, error_message: str or None)
+    """
+    if not CREDENTIALS_PATH.exists():
+        return False, "credentials.json no encontrado en config/"
+
+    if not TOKEN_PATH.exists():
+        return False, (
+            "No hay token guardado. Ejecuta la autenticación inicial desde CLI:\n"
+            '  python -c "from services.gmail_service import get_gmail_service; get_gmail_service()"'
+        )
+
+    from google.oauth2.credentials import Credentials
+    from google.auth.transport.requests import Request
+    import google.auth.exceptions
+
+    try:
+        creds = Credentials.from_authorized_user_file(str(TOKEN_PATH), SCOPES)
+    except Exception as e:
+        return False, f"Token inválido o corrupto: {e}. Borra config/token.json y re-autentica."
+
+    if creds.valid:
+        return True, None
+
+    if creds.expired and creds.refresh_token:
+        try:
+            creds.refresh(Request())
+            with open(TOKEN_PATH, 'w') as f:
+                f.write(creds.to_json())
+            return True, None
+        except google.auth.exceptions.RefreshError:
+            return False, _REAUTH_MSG
+        except Exception as e:
+            return False, f"Error al refrescar token: {e}"
+
+    return False, _REAUTH_MSG
 
 
 def get_gmail_service():
@@ -54,6 +103,7 @@ def get_gmail_service():
     from google_auth_oauthlib.flow import InstalledAppFlow
     from google.auth.transport.requests import Request
     from googleapiclient.discovery import build
+    import google.auth.exceptions
 
     creds = None
 
@@ -64,7 +114,13 @@ def get_gmail_service():
     # Refresh or get new credentials
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
+            try:
+                creds.refresh(Request())
+            except google.auth.exceptions.RefreshError:
+                # Token revocado — necesita re-autenticación completa
+                print(f"[!] {_REAUTH_MSG}")
+                flow = InstalledAppFlow.from_client_secrets_file(str(CREDENTIALS_PATH), SCOPES)
+                creds = flow.run_local_server(port=0)
         else:
             flow = InstalledAppFlow.from_client_secrets_file(str(CREDENTIALS_PATH), SCOPES)
             creds = flow.run_local_server(port=0)
@@ -130,7 +186,7 @@ def download_email(message_id, service=None):
     if service is None:
         service = get_gmail_service()
 
-    # Get message in raw format
+    # Single API call: raw format contains headers + body
     msg = service.users().messages().get(
         userId='me', id=message_id, format='raw'
     ).execute()
@@ -138,18 +194,10 @@ def download_email(message_id, service=None):
     raw_data = msg.get('raw', '')
     email_bytes = base64.urlsafe_b64decode(raw_data)
 
-    # Get metadata for filename
-    headers = {}
-    msg_metadata = service.users().messages().get(
-        userId='me', id=message_id, format='metadata',
-        metadataHeaders=['Subject', 'From', 'Date']
-    ).execute()
-
-    for header in msg_metadata.get('payload', {}).get('headers', []):
-        headers[header['name'].lower()] = header['value']
-
-    subject = headers.get('subject', 'Unknown')
-    sender = headers.get('from', '')
+    # Extract headers from raw email (no second API call needed)
+    parsed_msg = email_lib.message_from_bytes(email_bytes)
+    subject = parsed_msg.get('Subject', 'Unknown')
+    sender = parsed_msg.get('From', '')
 
     # Filter out promos that slip through the Gmail query
     # Real receipts: "Tu viaje del...", "Tu viaje Uber del...", "Tu viaje Pone Tu Precio del...", "Tu viaje Express del..."

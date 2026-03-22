@@ -9,7 +9,6 @@ from pathlib import Path
 from bs4 import BeautifulSoup
 from datetime import datetime
 import re
-from decimal import Decimal
 
 
 def parse_receipt(file_path):

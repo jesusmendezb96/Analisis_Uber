@@ -4,8 +4,24 @@ import webbrowser
 import threading
 
 
+def _check_gmail_token():
+    """Warn on startup if Gmail token is expired. Does not block launch."""
+    try:
+        from services.gmail_service import is_configured, validate_credentials
+        if not is_configured():
+            return
+        valid, _ = validate_credentials()
+        if not valid:
+            print("\n[!] Token de Gmail expirado.")
+            print("    Abre /gmail en la UI y haz clic en 'Re-autenticar Gmail'.")
+    except Exception:
+        pass  # Never block startup due to token check failures
+
+
 def launch():
     """Launch the Flask web app and open browser."""
+    _check_gmail_token()
+
     from web import create_app
     app = create_app()
 
