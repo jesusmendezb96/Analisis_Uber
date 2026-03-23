@@ -34,6 +34,29 @@ def _ensure_playwright():
         return False
 
 
+def _prepare_html_for_pdf(html_content):
+    """
+    Prepare email HTML for reliable PDF rendering.
+
+    Uber/Didi emails use custom @font-face fonts from external CDNs.
+    These fonts load fine for screen but fail to embed in PDFs when using
+    domcontentloaded (which doesn't wait for font downloads).
+    Inject CSS to force system fonts so text is always visible in PDFs.
+    """
+    font_override = """<style>
+/* Force system fonts for PDF — Uber/Didi emails use custom @font-face from CDNs
+   that load for screen but fail to embed in PDFs. Override everything to Arial. */
+* { font-family: Arial, Helvetica, sans-serif !important; }
+</style>"""
+    # Inject right before </head> so it overrides all prior style blocks
+    if '</head>' in html_content:
+        return html_content.replace('</head>', font_override + '</head>', 1)
+    elif '</HEAD>' in html_content:
+        return html_content.replace('</HEAD>', font_override + '</HEAD>', 1)
+    else:
+        return html_content + font_override
+
+
 def convert_htmls_to_pdfs(html_pdf_pairs, task_id=None):
     """
     Convert multiple HTMLs to PDFs using a single browser instance.
@@ -56,15 +79,20 @@ def convert_htmls_to_pdfs(html_pdf_pairs, task_id=None):
     try:
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True)
-            page = browser.new_page()
+            # Force light color scheme so Uber's @media(prefers-color-scheme:dark)
+            # CSS doesn't activate. Dark mode causes white text on failed dark
+            # backgrounds, making PDFs unreadable.
+            page = browser.new_page(color_scheme='light')
 
             for i, (html_content, pdf_path) in enumerate(html_pdf_pairs):
                 try:
                     # Use absolute path to avoid CWD ambiguity in background threads
                     abs_pdf_path = Path(pdf_path).absolute()
+                    # Override external @font-face with system fonts for PDF embedding
+                    pdf_html = _prepare_html_for_pdf(html_content)
                     # timeout=20s: Uber HTML has external resources; domcontentloaded
                     # is faster and sufficient for PDF rendering
-                    page.set_content(html_content, wait_until='domcontentloaded', timeout=20000)
+                    page.set_content(pdf_html, wait_until='domcontentloaded', timeout=20000)
                     page.pdf(
                         path=str(abs_pdf_path),
                         format='A4',
